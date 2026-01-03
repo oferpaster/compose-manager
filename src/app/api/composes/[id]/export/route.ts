@@ -89,7 +89,7 @@ export async function GET(
   const safeCompose = row.compose_name.replace(/[^a-zA-Z0-9_-]+/g, "-");
   const fileName = `${safeProject}__${safeCompose}.zip`;
 
-  return new NextResponse(buffer, {
+  return new NextResponse(buffer as unknown as BodyInit, {
     headers: {
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename=${fileName}`,

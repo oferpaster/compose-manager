@@ -11,7 +11,7 @@ export async function GET(
   const db = getDb();
   const row = db
     .prepare("SELECT config_json, project_id FROM composes WHERE id = ?")
-    .get(id);
+    .get(id) as { config_json: string; project_id: string } | undefined;
   if (!row) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
