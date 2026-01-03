@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ComposeBuilder
 
-## Getting Started
+ComposeBuilder is a Next.js app for building Docker Compose files from templates.
 
-First, run the development server:
+## Features
+
+- Projects → multiple compose versions per project
+- Live docker-compose.yml and .env previews
+- Predefined services with versions, ports, volumes, env, networks
+- Spring Boot application.properties templates with inline editing
+- Service templates editor
+- Utility scripts manager (for future export bundles)
+- Export compose bundles as ZIP
+
+## Requirements
+
+- Node.js 20+
+- npm 9+
+
+## Local development
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Docker
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Build and run with Docker Compose:
 
-## Learn More
+```bash
+docker compose up --build
+```
 
-To learn more about Next.js, take a look at the following resources:
+The app will be available at http://localhost:3000
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Data persistence
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Runtime data is stored in the `data/` folder (SQLite DB, templates, exports).
+This directory is ignored by git so the repo stays clean.
 
-## Deploy on Vercel
+## Notes
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- No user accounts; everything is global.
+- Template edits are stored in `data/catalog.json`.
+- Scripts are stored in SQLite and can be exported later.

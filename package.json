@@ -9,9 +9,13 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "archiver": "^7.0.1",
+    "better-sqlite3": "^12.5.0",
     "next": "16.1.1",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "yaml": "^2.8.2",
+    "zod": "^4.3.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
