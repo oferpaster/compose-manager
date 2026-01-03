@@ -46,6 +46,21 @@ export default function SettingsPage() {
             </Link>
           </div>
         </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Networks</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Configure the default networks for compose services.
+          </p>
+          <div className="mt-4">
+            <Link
+              href="/networks"
+              className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
+            >
+              Open networks
+            </Link>
+          </div>
+        </section>
       </div>
     </main>
   );

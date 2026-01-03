@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { PREDEFINED_NETWORKS, ServiceCatalogItem } from "@/lib/serviceCatalog";
+import { ServiceCatalogItem } from "@/lib/serviceCatalog";
 
 const emptyService = (): ServiceCatalogItem => ({
   id: "",
@@ -27,6 +27,7 @@ export default function TemplateEditorPage() {
   const [service, setService] = useState<ServiceCatalogItem>(emptyService());
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
+  const [networks, setNetworks] = useState<string[]>([]);
 
   useEffect(() => {
     async function load() {
@@ -44,6 +45,16 @@ export default function TemplateEditorPage() {
 
     load().catch(() => null);
   }, [params.id]);
+
+  useEffect(() => {
+    async function loadNetworks() {
+      const response = await fetch("/api/networks");
+      const data = (await response.json()) as { networks: string[] };
+      setNetworks(data.networks || []);
+    }
+
+    loadNetworks().catch(() => null);
+  }, []);
 
   const envText = useMemo(
     () =>
@@ -278,7 +289,7 @@ export default function TemplateEditorPage() {
             <div className="space-y-2">
               <p className="text-sm text-slate-600">Default networks</p>
               <div className="flex flex-wrap gap-2">
-                {PREDEFINED_NETWORKS.map((network) => {
+                {networks.map((network) => {
                   const selected = service.defaultNetworks?.includes(network);
                   return (
                     <button

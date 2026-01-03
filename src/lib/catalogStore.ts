@@ -9,14 +9,14 @@ export function loadCatalog(): ServiceCatalogItem[] {
     try {
       const raw = fs.readFileSync(CATALOG_PATH, "utf8");
       const parsed = JSON.parse(raw) as ServiceCatalogItem[];
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
     } catch {
-      return SERVICE_CATALOG;
+      return [];
     }
   }
-  return SERVICE_CATALOG;
+  return [];
 }
 
 export function saveCatalog(nextCatalog: ServiceCatalogItem[]) {

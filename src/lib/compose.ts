@@ -1,5 +1,5 @@
 import { stringify as yamlStringify, parse as yamlParse } from "yaml";
-import { PREDEFINED_NETWORKS, ServiceCatalogItem } from "./serviceCatalog";
+import { ServiceCatalogItem } from "./serviceCatalog";
 
 export type KeyValue = {
   key: string;
@@ -221,9 +221,7 @@ export function generateComposeObject(
 
   const networks: Record<string, Record<string, unknown>> = {};
   Array.from(usedNetworks).forEach((network) => {
-    if (PREDEFINED_NETWORKS.includes(network)) {
-      networks[network] = {};
-    }
+    networks[network] = {};
   });
 
   return {
