@@ -285,10 +285,20 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
     });
   };
 
-  const handleAddService = () => {
+  const handleAddService = async () => {
     if (!selectedService) return;
     const version = selectedVersion || selectedService.versions[0] || "latest";
     const count = Math.max(1, serviceCount || 1);
+
+    try {
+      await onSave(config);
+      setSaveMessage("Saved");
+      setSaveStatus("success");
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : "Failed to save");
+      setSaveStatus("error");
+      return;
+    }
 
     router.push(
       `/compose/${config.id}/add-service?serviceId=${selectedService.id}&version=${version}&count=${count}`
