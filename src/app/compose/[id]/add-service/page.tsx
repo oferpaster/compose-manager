@@ -191,16 +191,11 @@ export default function AddServicePage() {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => router.push("/")}
-              className="rounded-full border border-slate-200 px-5 py-2 text-sm text-slate-600"
-            >
-              Back to home
-            </button>
-            <button
               onClick={() => router.push(`/compose/${params.id}`)}
               className="rounded-full border border-slate-200 px-5 py-2 text-sm text-slate-600"
             >
-              Cancel
+              <span className="mr-2 inline-flex h-4 w-4 items-center justify-center">←</span>
+              Back
             </button>
             <button
               onClick={handleSave}
