@@ -469,6 +469,15 @@ function parseCommand(value: unknown) {
   return "";
 }
 
+function splitImageTag(image: string) {
+  const lastColon = image.lastIndexOf(":");
+  const lastSlash = image.lastIndexOf("/");
+  if (lastColon > -1 && lastColon > lastSlash) {
+    return { name: image.slice(0, lastColon), tag: image.slice(lastColon + 1) };
+  }
+  return { name: image, tag: "latest" };
+}
+
 function parseHealthcheck(value: unknown): HealthcheckConfig {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return { test: "", interval: "", timeout: "", retries: null, startPeriod: "" };
@@ -537,9 +546,9 @@ export function parseComposeYamlToConfig(
   Object.entries(servicesMap).forEach(([serviceName, value]) => {
     const serviceBody = value || {};
     const image = typeof serviceBody.image === "string" ? serviceBody.image : "";
-    const imageParts = image.split(":");
-    const imageName = imageParts[0] || "";
-    const version = imageParts.length > 1 ? imageParts.slice(1).join(":") : "latest";
+    const parsedImage = splitImageTag(image);
+    const imageName = parsedImage.name || "";
+    const version = parsedImage.tag || "latest";
     const baseName = serviceName.replace(/-\d+$/, "");
     const catalogService = imageName
       ? findServiceByImage(catalog, imageName)

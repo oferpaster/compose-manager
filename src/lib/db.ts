@@ -2,14 +2,14 @@ import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const DB_PATH = path.join(DATA_DIR, "app.db");
+const PRIMARY_DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
+const FALLBACK_DATA_DIR = "/tmp/composebuilder-data";
 
 let db: Database.Database | null = null;
 
-function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+function ensureDataDir(targetDir: string) {
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
   }
 }
 
@@ -73,8 +73,26 @@ function initDb(database: Database.Database) {
 
 export function getDb() {
   if (db) return db;
-  ensureDataDir();
-  db = new Database(DB_PATH);
+  let dbPath = path.join(PRIMARY_DATA_DIR, "app.db");
+  try {
+    ensureDataDir(PRIMARY_DATA_DIR);
+    db = new Database(dbPath);
+  } catch (error) {
+    const fallbackPath = path.join(FALLBACK_DATA_DIR, "app.db");
+    try {
+      ensureDataDir(FALLBACK_DATA_DIR);
+      db = new Database(fallbackPath);
+      dbPath = fallbackPath;
+      console.warn(
+        `Failed to open database at ${path.join(PRIMARY_DATA_DIR, "app.db")}. ` +
+          `Using fallback at ${dbPath}.`,
+        error
+      );
+    } catch (fallbackError) {
+      console.error("Failed to open sqlite database.", fallbackError);
+      throw fallbackError;
+    }
+  }
   initDb(db);
   return db;
 }

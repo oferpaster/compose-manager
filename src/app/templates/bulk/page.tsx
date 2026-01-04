@@ -46,6 +46,15 @@ type ComposeYaml = {
   networks?: Record<string, unknown> | string[];
 };
 
+function splitImageTag(image: string) {
+  const lastColon = image.lastIndexOf(":");
+  const lastSlash = image.lastIndexOf("/");
+  if (lastColon > -1 && lastColon > lastSlash) {
+    return { name: image.slice(0, lastColon), tag: image.slice(lastColon + 1) };
+  }
+  return { name: image, tag: "latest" };
+}
+
 function parseStringArray(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value
@@ -248,8 +257,9 @@ export default function BulkTemplatesPage() {
     Object.entries(parsed.services).forEach(([serviceName, service]) => {
       const image = typeof service.image === "string" ? service.image : "";
       if (!image) return;
-      const [imageName, ...tagParts] = image.split(":");
-      const version = tagParts.length > 0 ? tagParts.join(":") : "latest";
+      const parsedImage = splitImageTag(image);
+      const imageName = parsedImage.name;
+      const version = parsedImage.tag || "latest";
 
       const ports = parseStringArray(service.ports);
       const volumes = parseStringArray(service.volumes);
