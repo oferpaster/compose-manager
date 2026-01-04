@@ -10,6 +10,14 @@ type ComposeRow = {
   updated_at: string;
 };
 
+type SnapshotRow = {
+  id: string;
+  name: string;
+  description: string;
+  file_name: string;
+  created_at: string;
+};
+
 type ProjectResponse = {
   project: { id: string; name: string };
   composes: ComposeRow[];
@@ -25,6 +33,13 @@ export default function ProjectDetailPage() {
   const [duplicateName, setDuplicateName] = useState("");
   const [duplicateTarget, setDuplicateTarget] = useState<ComposeRow | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [snapshotsOpen, setSnapshotsOpen] = useState(false);
+  const [snapshotTarget, setSnapshotTarget] = useState<ComposeRow | null>(null);
+  const [snapshots, setSnapshots] = useState<SnapshotRow[]>([]);
+  const [snapshotsError, setSnapshotsError] = useState("");
+  const [snapshotName, setSnapshotName] = useState("");
+  const [snapshotDescription, setSnapshotDescription] = useState("");
+  const [snapshotSaving, setSnapshotSaving] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -82,6 +97,93 @@ export default function ProjectDetailPage() {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+  };
+
+  const openSnapshots = async (compose: ComposeRow) => {
+    setSnapshotTarget(compose);
+    setSnapshotsOpen(true);
+    setSnapshotsError("");
+    setSnapshotName("");
+    setSnapshotDescription("");
+    try {
+      const response = await fetch(`/api/composes/${compose.id}/snapshots`);
+      if (!response.ok) {
+        throw new Error("Failed to load snapshots");
+      }
+      const data = (await response.json()) as { snapshots: SnapshotRow[] };
+      setSnapshots(data.snapshots || []);
+    } catch (loadError) {
+      setSnapshotsError(loadError instanceof Error ? loadError.message : "Failed to load");
+    }
+  };
+
+  const handleCreateSnapshot = async () => {
+    if (!snapshotTarget) return;
+    const name = snapshotName.trim();
+    if (!name) {
+      setSnapshotsError("Snapshot name is required");
+      return;
+    }
+    setSnapshotSaving(true);
+    setSnapshotsError("");
+    try {
+      const response = await fetch(`/api/composes/${snapshotTarget.id}/snapshots`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          description: snapshotDescription.trim(),
+        }),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to create snapshot");
+      }
+      const data = (await response.json()) as { snapshot: SnapshotRow };
+      setSnapshots((prev) => [data.snapshot, ...prev]);
+      setSnapshotName("");
+      setSnapshotDescription("");
+    } catch (createError) {
+      setSnapshotsError(
+        createError instanceof Error ? createError.message : "Failed to create snapshot"
+      );
+    } finally {
+      setSnapshotSaving(false);
+    }
+  };
+
+  const handleDownloadSnapshot = async (snapshot: SnapshotRow) => {
+    if (!snapshotTarget) return;
+    const response = await fetch(
+      `/api/composes/${snapshotTarget.id}/snapshots/${snapshot.id}`
+    );
+    if (!response.ok) {
+      setSnapshotsError("Failed to download snapshot");
+      return;
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = snapshot.file_name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDeleteSnapshot = async (snapshotId: string) => {
+    if (!snapshotTarget) return;
+    const confirmed = window.confirm("Delete this snapshot?");
+    if (!confirmed) return;
+    const response = await fetch(
+      `/api/composes/${snapshotTarget.id}/snapshots/${snapshotId}`,
+      { method: "DELETE" }
+    );
+    if (!response.ok) {
+      setSnapshotsError("Failed to delete snapshot");
+      return;
+    }
+    setSnapshots((prev) => prev.filter((item) => item.id !== snapshotId));
   };
 
   const filteredComposes = composes.filter((compose) =>
@@ -233,6 +335,20 @@ export default function ProjectDetailPage() {
                     </svg>
                     Export
                   </button>
+                  <button
+                    onClick={() => openSnapshots(compose)}
+                    className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-1 text-sm text-violet-700"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                      className="mr-2 inline-block h-4 w-4"
+                      fill="currentColor"
+                    >
+                      <path d="M4 6a2 2 0 0 1 2-2h7l5 5v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6zm9 0v4h4" />
+                    </svg>
+                    Snapshots
+                  </button>
                   <Link
                     href={`/compose/${compose.id}`}
                     className="rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-sm text-sky-700"
@@ -297,6 +413,108 @@ export default function ProjectDetailPage() {
               >
                 Duplicate
               </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {snapshotsOpen && snapshotTarget ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-8">
+          <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Snapshots</h2>
+                <p className="text-sm text-slate-500">
+                  {snapshotTarget.name} · {project.name}
+                </p>
+              </div>
+              <button
+                onClick={() => setSnapshotsOpen(false)}
+                className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <label className="text-sm text-slate-600">
+                Snapshot name
+                <input
+                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                  value={snapshotName}
+                  onChange={(event) => setSnapshotName(event.target.value)}
+                  placeholder="v1.0 baseline"
+                />
+              </label>
+              <label className="text-sm text-slate-600">
+                Description
+                <input
+                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                  value={snapshotDescription}
+                  onChange={(event) => setSnapshotDescription(event.target.value)}
+                  placeholder="What changed?"
+                />
+              </label>
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-3">
+              {snapshotsError ? (
+                <p className="text-sm text-rose-600">{snapshotsError}</p>
+              ) : (
+                <span />
+              )}
+              <button
+                onClick={handleCreateSnapshot}
+                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                disabled={snapshotSaving}
+              >
+                {snapshotSaving ? "Saving..." : "Create snapshot"}
+              </button>
+            </div>
+
+            <div className="mt-6">
+              <h3 className="text-sm font-semibold text-slate-700">
+                Saved snapshots
+              </h3>
+              {snapshots.length === 0 ? (
+                <div className="mt-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
+                  No snapshots yet.
+                </div>
+              ) : (
+                <div className="mt-3 space-y-3">
+                  {snapshots.map((snapshot) => (
+                    <div
+                      key={snapshot.id}
+                      className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {snapshot.name}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {snapshot.description || "No description"}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          {new Date(snapshot.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleDownloadSnapshot(snapshot)}
+                          className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs text-emerald-700"
+                        >
+                          Download
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSnapshot(snapshot.id)}
+                          className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1 text-xs text-rose-700"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -20,6 +20,7 @@ export default function EditServiceGroupPage() {
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [templateCache, setTemplateCache] = useState<Record<string, string>>({});
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadCatalog() {
@@ -49,6 +50,7 @@ export default function EditServiceGroupPage() {
         return;
       }
       setInstances(groupInstances);
+      setSelectedId(groupInstances[0]?.id || null);
     }
 
     loadCompose().catch(() => setError("Failed to load compose"));
@@ -71,6 +73,41 @@ export default function EditServiceGroupPage() {
 
   const removeInstance = (id: string) => {
     setInstances((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  useEffect(() => {
+    if (!instances.length) {
+      setSelectedId(null);
+      return;
+    }
+    const exists = instances.some((instance) => instance.id === selectedId);
+    if (!exists) {
+      setSelectedId(instances[0].id);
+    }
+  }, [instances, selectedId]);
+
+  const addInstance = () => {
+    if (!instances.length) return;
+    const base = instances[0];
+    const existingNames = new Set(instances.map((instance) => instance.name));
+    const baseName = base.serviceId || base.name.replace(/-\d+$/, "") || "service";
+    let index = 1;
+    let candidate = `${baseName}-${index}`;
+    while (existingNames.has(candidate)) {
+      index += 1;
+      candidate = `${baseName}-${index}`;
+    }
+    const nextName = candidate;
+    const nextContainerName =
+      base.containerName && base.containerName === base.name ? nextName : base.containerName;
+    const nextInstance: ServiceConfig = {
+      ...base,
+      id: crypto.randomUUID(),
+      name: nextName,
+      containerName: nextContainerName,
+    };
+    setInstances((prev) => [...prev, nextInstance]);
+    setSelectedId(nextInstance.id);
   };
 
   const handleSave = async () => {
@@ -166,18 +203,97 @@ export default function EditServiceGroupPage() {
           </div>
         </header>
 
-        <section className="space-y-6">
-          {instances.map((instance) => (
-            <ServiceInstanceEditor
-              key={instance.id}
-              service={instance}
-              catalog={catalog.services}
-              networks={catalog.networks.map((network) => network.name)}
-              onChange={(next) => updateInstance(instance.id, next)}
-              onRemove={instances.length > 1 ? () => removeInstance(instance.id) : undefined}
-              onLoadTemplate={loadTemplate}
-            />
-          ))}
+        <section className="grid gap-6 lg:grid-cols-[320px_1fr]">
+          <aside className="space-y-4">
+            <button
+              onClick={addInstance}
+              className="w-full rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+            >
+              + Add instance
+            </button>
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 text-xs uppercase tracking-widest text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">Instance</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {instances.map((instance) => (
+                    <tr
+                      key={instance.id}
+                      className={`border-t ${
+                        selectedId === instance.id ? "bg-slate-100" : "bg-white"
+                      }`}
+                    >
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => setSelectedId(instance.id)}
+                          className="w-full text-left font-semibold text-slate-900"
+                        >
+                          {instance.name}
+                        </button>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {instance.version || "latest"}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => setSelectedId(instance.id)}
+                          className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-blue-200 text-blue-600 transition hover:bg-blue-50"
+                          title="Edit"
+                        >
+                          <svg
+                            aria-hidden="true"
+                            viewBox="0 0 24 24"
+                            className="h-4 w-4"
+                            fill="currentColor"
+                          >
+                            <path d="M3 17.25V21h3.75L19.81 7.94l-3.75-3.75L3 17.25zm17.71-10.04a1.003 1.003 0 0 0 0-1.42L18.2 3.29a1.003 1.003 0 0 0-1.42 0L15 5.08l3.75 3.75 1.96-1.62z" />
+                          </svg>
+                        </button>
+                        {instances.length > 1 ? (
+                          <button
+                            onClick={() => removeInstance(instance.id)}
+                            className="ml-2 inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-rose-200 text-rose-600 transition hover:bg-rose-50"
+                            title="Remove"
+                          >
+                            <svg
+                              aria-hidden="true"
+                              viewBox="0 0 24 24"
+                              className="h-4 w-4"
+                              fill="currentColor"
+                            >
+                              <path d="M6.4 5l5.6 5.6L17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4 6.4 5z" />
+                            </svg>
+                          </button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </aside>
+          <div>
+            {selectedId ? (
+              <ServiceInstanceEditor
+                key={selectedId}
+                service={
+                  instances.find((instance) => instance.id === selectedId) || instances[0]
+                }
+                catalog={catalog.services}
+                networks={catalog.networks.map((network) => network.name)}
+                onChange={(next) => updateInstance(selectedId, next)}
+                onLoadTemplate={loadTemplate}
+              />
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
+                Select an instance to edit.
+              </div>
+            )}
+          </div>
         </section>
       </div>
     </main>

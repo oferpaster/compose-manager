@@ -57,6 +57,21 @@ function initDb(database: Database.Database) {
     `
     )
     .run();
+  database
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS snapshots (
+        id TEXT PRIMARY KEY,
+        compose_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+    `
+    )
+    .run();
 
   const columns = database.prepare("PRAGMA table_info(composes)").all() as { name: string }[];
   const hasProjectId = columns.some((col) => col.name === "project_id");
