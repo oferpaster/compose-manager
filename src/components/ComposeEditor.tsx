@@ -89,6 +89,8 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
   const [yamlError, setYamlError] = useState("");
   const [serviceSearch, setServiceSearch] = useState("");
   const [prometheusDraft, setPrometheusDraft] = useState("");
+  const [isValidationOpen, setIsValidationOpen] = useState(false);
+  const [isEditMenuOpen, setIsEditMenuOpen] = useState(false);
 
   useEffect(() => {
     setConfig(normalizeComposeConfig(initialConfig));
@@ -124,8 +126,12 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
     return groupedServices.filter((group) => {
       const info = catalog.services.find((item) => item.id === group.serviceId);
       const name = info?.name || group.serviceId;
-      const instanceNames = group.instances.map((instance) => instance.name).join(" ");
-      return `${name} ${group.serviceId} ${instanceNames}`.toLowerCase().includes(query);
+      const instanceNames = group.instances
+        .map((instance) => instance.name)
+        .join(" ");
+      return `${name} ${group.serviceId} ${instanceNames}`
+        .toLowerCase()
+        .includes(query);
     });
   }, [catalog.services, groupedServices, serviceSearch]);
 
@@ -140,6 +146,49 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
     return generatePrometheusYaml(config, catalog.services);
   }, [config, catalog.services]);
   const envFile = useMemo(() => generateEnvFile(config), [config]);
+
+  const validation = useMemo(() => {
+    const definedGlobal = new Set<string>();
+    const definedService = new Set<string>();
+
+    config.globalEnv.forEach((entry) => {
+      if (entry.key.trim()) definedGlobal.add(entry.key.trim());
+    });
+    config.services.forEach((service) => {
+      service.env.forEach((entry) => {
+        if (entry.key.trim()) definedService.add(entry.key.trim());
+      });
+    });
+
+    const referenced = new Set<string>();
+    const pattern = /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::[^}]*)?\}/g;
+    const extractFromText = (text: string) => {
+      let match: RegExpExecArray | null = null;
+      while ((match = pattern.exec(text)) !== null) {
+        referenced.add(match[1]);
+      }
+    };
+
+    extractFromText(composeYaml);
+    extractFromText(envFile);
+    config.services.forEach((service) => {
+      if (service.applicationProperties) {
+        extractFromText(service.applicationProperties);
+      }
+    });
+
+    const definedAll = new Set<string>([...definedGlobal, ...definedService]);
+    const missing = Array.from(referenced).filter(
+      (key) => !definedAll.has(key)
+    );
+    const unused = Array.from(definedGlobal).filter(
+      (key) => !referenced.has(key)
+    );
+    missing.sort();
+    unused.sort();
+
+    return { missing, unused };
+  }, [composeYaml, config, envFile]);
 
   const highlightLines = useMemo(() => {
     if (!hoveredGroupId) return new Set<number>();
@@ -238,7 +287,10 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
     }));
   };
 
-  const updateNginxField = (field: "cert" | "key" | "ca" | "config", value: string) => {
+  const updateNginxField = (
+    field: "cert" | "key" | "ca" | "config",
+    value: string
+  ) => {
     setConfig((prev) => ({
       ...prev,
       nginx: {
@@ -265,7 +317,10 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
     }));
   };
 
-  const handleNginxFile = async (field: "cert" | "key" | "ca" | "config", file: File) => {
+  const handleNginxFile = async (
+    field: "cert" | "key" | "ca" | "config",
+    file: File
+  ) => {
     const content = await file.text();
     updateNginxField(field, content);
   };
@@ -383,7 +438,11 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
   };
 
   const applyYamlEditor = () => {
-    const result = parseComposeYamlToConfig(yamlDraft, config, catalog.services);
+    const result = parseComposeYamlToConfig(
+      yamlDraft,
+      config,
+      catalog.services
+    );
     if (result.error) {
       setYamlError(result.error);
       return;
@@ -406,27 +465,59 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
               </h1>
             </div>
             <div className="flex items-center gap-3">
-            <a
-              href={config.projectId ? `/projects/${config.projectId}` : "/"}
-              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600"
-            >
-              ← Back
-            </a>
-              <button
-                onClick={openEnvEditor}
-                className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600"
+              <a
+                href={config.projectId ? `/projects/${config.projectId}` : "/"}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600"
               >
-                Edit .env
-              </button>
+                ← Back
+              </a>
               <button
-                onClick={openYamlEditor}
-                className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600"
+                onClick={() => setIsValidationOpen(true)}
+                className="cursor-pointer rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-amber-700"
               >
-                Edit YAML
+                Validate
               </button>
+              <div className="relative">
+                <button
+                  onClick={() => setIsEditMenuOpen((prev) => !prev)}
+                  className="cursor-pointer rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600"
+                >
+                  Edit inline
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 20 20"
+                    className="ml-2 inline-block h-3 w-3"
+                    fill="currentColor"
+                  >
+                    <path d="M5.5 7.5l4.5 4.5 4.5-4.5-1.5-1.5-3 3-3-3-1.5 1.5z" />
+                  </svg>
+                </button>
+                {isEditMenuOpen ? (
+                  <div className="absolute right-0 mt-2 w-40 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+                    <button
+                      onClick={() => {
+                        setIsEditMenuOpen(false);
+                        openEnvEditor();
+                      }}
+                      className="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-100"
+                    >
+                      Edit .env
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsEditMenuOpen(false);
+                        openYamlEditor();
+                      }}
+                      className="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-100"
+                    >
+                      Edit YAML
+                    </button>
+                  </div>
+                ) : null}
+              </div>
               <button
                 onClick={handleSave}
-                className="cursor-pointer rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow"
+                className="cursor-pointer rounded-full bg-slate-900 px-4 py-1.5 text-sm font-semibold text-white shadow"
                 disabled={isSaving}
               >
                 <svg
@@ -439,8 +530,25 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
                 </svg>
                 {isSaving ? "Saving..." : "Save"}
               </button>
+            </div>
           </div>
-        </div>
+
+          {(validation.missing.length > 0 || validation.unused.length > 0) && (
+            <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+              {validation.missing.length > 0 ? (
+                <p>
+                  Missing envs: {validation.missing.slice(0, 5).join(", ")}
+                  {validation.missing.length > 5 ? "…" : ""}
+                </p>
+              ) : null}
+              {validation.unused.length > 0 ? (
+                <p className={validation.missing.length > 0 ? "mt-1" : ""}>
+                  Unused envs: {validation.unused.slice(0, 5).join(", ")}
+                  {validation.unused.length > 5 ? "…" : ""}
+                </p>
+              ) : null}
+            </section>
+          )}
 
           <label className="block text-sm font-medium text-slate-700">
             Compose name
@@ -460,19 +568,19 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
             <h2 className="text-lg font-semibold text-slate-900">Networks</h2>
           </div>
           <div className="flex flex-wrap gap-2">
-              {catalog.networks.map((network) => (
-                <button
-                  key={network.name}
-                  onClick={() => toggleNetwork(network.name)}
-                  className={`rounded-full border px-3 py-1 text-sm ${
-                    config.networks.includes(network.name)
-                      ? "border-slate-900 bg-slate-900 text-white"
-                      : "border-slate-200 text-slate-600"
-                  }`}
-                >
-                  {network.name}
-                </button>
-              ))}
+            {catalog.networks.map((network) => (
+              <button
+                key={network.name}
+                onClick={() => toggleNetwork(network.name)}
+                className={`rounded-full border px-3 py-1 text-sm ${
+                  config.networks.includes(network.name)
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-200 text-slate-600"
+                }`}
+              >
+                {network.name}
+              </button>
+            ))}
           </div>
         </section>
 
@@ -525,29 +633,120 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
           </button>
         </section>
 
-        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-900">Logging</h2>
-            <span className="text-xs uppercase tracking-widest text-slate-400">
-              x-logging
-            </span>
+        <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <summary className="flex cursor-pointer list-none items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900">
+              Ports Overview
+            </h2>
+            <span className="text-sm text-slate-500">Toggle</span>
+          </summary>
+          <div className="mt-4 space-y-4">
+            {config.services.filter((service) => service.ports.length > 0)
+              .length === 0 ? (
+              <p className="text-sm text-slate-500">
+                No port mappings defined.
+              </p>
+            ) : (
+              <div className="overflow-hidden rounded-xl border border-slate-200">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase tracking-widest text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3">Service</th>
+                      <th className="px-4 py-3">Ports</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {config.services
+                      .filter((service) => service.ports.length > 0)
+                      .map((service) => (
+                        <tr key={`ports-${service.id}`} className="border-t">
+                          <td className="px-4 py-3 font-semibold text-slate-900">
+                            {service.name}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {service.ports.join(", ")}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-          <label className="text-sm text-slate-600">
-            Default logging template (YAML)
-            <textarea
-              className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
-              value={config.loggingTemplate || ""}
-              onChange={(event) => updateLoggingTemplate(event.target.value)}
-              placeholder={`driver: local\\noptions:\\n  max-size: \"10m\"\\n  max-file: \"5\"`}
-            />
-          </label>
-        </section>
+        </details>
+
+        <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <summary className="flex cursor-pointer list-none items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900">
+              Volumes Overview
+            </h2>
+            <span className="text-sm text-slate-500">Toggle</span>
+          </summary>
+          <div className="mt-4 space-y-4">
+            {config.services.filter((service) => service.volumes.length > 0)
+              .length === 0 ? (
+              <p className="text-sm text-slate-500">No volumes mounted.</p>
+            ) : (
+              <div className="overflow-hidden rounded-xl border border-slate-200">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase tracking-widest text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3">Service</th>
+                      <th className="px-4 py-3">Volumes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {config.services
+                      .filter((service) => service.volumes.length > 0)
+                      .map((service) => (
+                        <tr key={`volumes-${service.id}`} className="border-t">
+                          <td className="px-4 py-3 font-semibold text-slate-900">
+                            {service.name}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {service.volumes.join(", ")}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </details>
+
+        <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <summary className="flex cursor-pointer list-none items-center justify-between">
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-semibold text-slate-900">Logging</h2>
+              <span className="text-xs uppercase tracking-widest text-slate-400">
+                x-logging
+              </span>
+            </div>
+            <span className="text-sm text-slate-500">Toggle</span>
+          </summary>
+          <div className="mt-4">
+            <label className="text-sm text-slate-600">
+              Default logging template (YAML)
+              <textarea
+                className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
+                value={config.loggingTemplate || ""}
+                onChange={(event) => updateLoggingTemplate(event.target.value)}
+                placeholder={`driver: local\\noptions:\\n  max-size: \"10m\"\\n  max-file: \"5\"`}
+              />
+            </label>
+          </div>
+        </details>
 
         <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <summary className="flex cursor-pointer list-none items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">Nginx config</h2>
-              <p className="text-xs uppercase tracking-widest text-slate-400">optional</p>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Nginx config
+              </h2>
+              <p className="text-xs uppercase tracking-widest text-slate-400">
+                optional
+              </p>
             </div>
             <span className="text-sm text-slate-500">Toggle</span>
           </summary>
@@ -570,7 +769,9 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
               <textarea
                 className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
                 value={config.nginx?.cert || ""}
-                onChange={(event) => updateNginxField("cert", event.target.value)}
+                onChange={(event) =>
+                  updateNginxField("cert", event.target.value)
+                }
                 placeholder="-----BEGIN CERTIFICATE-----"
               />
             </div>
@@ -592,7 +793,9 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
               <textarea
                 className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
                 value={config.nginx?.key || ""}
-                onChange={(event) => updateNginxField("key", event.target.value)}
+                onChange={(event) =>
+                  updateNginxField("key", event.target.value)
+                }
                 placeholder="-----BEGIN PRIVATE KEY-----"
               />
             </div>
@@ -636,7 +839,9 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
               <textarea
                 className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
                 value={config.nginx?.config || ""}
-                onChange={(event) => updateNginxField("config", event.target.value)}
+                onChange={(event) =>
+                  updateNginxField("config", event.target.value)
+                }
                 placeholder="server { ... }"
               />
             </div>
@@ -646,8 +851,12 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
         <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <summary className="flex cursor-pointer list-none items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">Prometheus</h2>
-              <p className="text-xs uppercase tracking-widest text-slate-400">optional</p>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Prometheus
+              </h2>
+              <p className="text-xs uppercase tracking-widest text-slate-400">
+                optional
+              </p>
             </div>
             <span className="text-sm text-slate-500">Toggle</span>
           </summary>
@@ -656,7 +865,9 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
               <input
                 type="checkbox"
                 checked={Boolean(config.prometheus?.enabled)}
-                onChange={(event) => updatePrometheus("enabled", event.target.checked)}
+                onChange={(event) =>
+                  updatePrometheus("enabled", event.target.checked)
+                }
               />
               Enable Prometheus export
             </label>
@@ -704,7 +915,11 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
                   >
                     <div>
                       <p className="font-semibold">{script.name}</p>
-                      <p className={selected ? "text-slate-200" : "text-slate-500"}>
+                      <p
+                        className={
+                          selected ? "text-slate-200" : "text-slate-500"
+                        }
+                      >
                         {script.description || "No description"}
                       </p>
                     </div>
@@ -987,6 +1202,58 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
                 Apply
               </button>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isValidationOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-8">
+          <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-900">
+                Validation
+              </h2>
+              <button
+                onClick={() => setIsValidationOpen(false)}
+                className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600"
+              >
+                Close
+              </button>
+            </div>
+            <div className="mt-4 grid gap-6 md:grid-cols-2">
+              <div>
+                <p className="text-sm font-semibold text-slate-700">
+                  Missing envs
+                </p>
+                {validation.missing.length === 0 ? (
+                  <p className="mt-2 text-sm text-slate-500">None</p>
+                ) : (
+                  <ul className="mt-2 space-y-1 text-sm text-rose-600">
+                    {validation.missing.map((key) => (
+                      <li key={`missing-${key}`}>{key}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-slate-700">
+                  Unused envs
+                </p>
+                {validation.unused.length === 0 ? (
+                  <p className="mt-2 text-sm text-slate-500">None</p>
+                ) : (
+                  <ul className="mt-2 space-y-1 text-sm text-slate-600">
+                    {validation.unused.map((key) => (
+                      <li key={`unused-${key}`}>{key}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+            <p className="mt-4 text-xs text-slate-500">
+              Checks ${"{VAR}"} and ${"{VAR:default}"} in compose, .env, and
+              application.properties.
+            </p>
           </div>
         </div>
       ) : null}
