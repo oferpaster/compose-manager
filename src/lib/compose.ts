@@ -141,7 +141,6 @@ export function createServiceConfig(
       ? Object.entries(service.defaultEnv).map(([key, value]) => ({ key, value }))
       : [],
     networks: service.defaultNetworks ? [...service.defaultNetworks] : [],
-    restart: service.defaultRestart || "",
     hostname: "",
     privileged: false,
     restart: "",
