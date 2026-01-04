@@ -202,8 +202,7 @@ export default function BulkTemplatesPage() {
       const next = [...existing];
 
       extracted.forEach((service) => {
-        const payload: ServiceCatalogItem = { ...service };
-        delete (payload as ExtractedService).sourceName;
+        const { sourceName: _sourceName, ...payload } = service;
         const index = next.findIndex((item) => item.image === payload.image);
         if (index >= 0) {
           const current = next[index];
