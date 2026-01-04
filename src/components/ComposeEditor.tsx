@@ -230,6 +230,24 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
     }));
   };
 
+  const updateNginxField = (field: "cert" | "key" | "ca" | "config", value: string) => {
+    setConfig((prev) => ({
+      ...prev,
+      nginx: {
+        cert: prev.nginx?.cert || "",
+        key: prev.nginx?.key || "",
+        ca: prev.nginx?.ca || "",
+        config: prev.nginx?.config || "",
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleNginxFile = async (field: "cert" | "key" | "ca" | "config", file: File) => {
+    const content = await file.text();
+    updateNginxField(field, content);
+  };
+
   const toggleNetwork = (network: string) => {
     setConfig((prev) => {
       const exists = prev.networks.includes(network);
@@ -480,6 +498,106 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
             + Add global env
           </button>
         </section>
+
+        <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <summary className="flex cursor-pointer list-none items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Nginx config</h2>
+              <p className="text-xs uppercase tracking-widest text-slate-400">optional</p>
+            </div>
+            <span className="text-sm text-slate-500">Toggle</span>
+          </summary>
+          <div className="mt-4 space-y-4">
+            <div>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-slate-600">Certificate (.crt)</p>
+                <label className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600">
+                  Upload
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) handleNginxFile("cert", file);
+                    }}
+                  />
+                </label>
+              </div>
+              <textarea
+                className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
+                value={config.nginx?.cert || ""}
+                onChange={(event) => updateNginxField("cert", event.target.value)}
+                placeholder="-----BEGIN CERTIFICATE-----"
+              />
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-slate-600">Private key (.key)</p>
+                <label className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600">
+                  Upload
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) handleNginxFile("key", file);
+                    }}
+                  />
+                </label>
+              </div>
+              <textarea
+                className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
+                value={config.nginx?.key || ""}
+                onChange={(event) => updateNginxField("key", event.target.value)}
+                placeholder="-----BEGIN PRIVATE KEY-----"
+              />
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-slate-600">CA bundle (.ca)</p>
+                <label className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600">
+                  Upload
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) handleNginxFile("ca", file);
+                    }}
+                  />
+                </label>
+              </div>
+              <textarea
+                className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
+                value={config.nginx?.ca || ""}
+                onChange={(event) => updateNginxField("ca", event.target.value)}
+                placeholder="-----BEGIN CERTIFICATE-----"
+              />
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-slate-600">nginx.conf</p>
+                <label className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600">
+                  Upload
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) handleNginxFile("config", file);
+                    }}
+                  />
+                </label>
+              </div>
+              <textarea
+                className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
+                value={config.nginx?.config || ""}
+                onChange={(event) => updateNginxField("config", event.target.value)}
+                placeholder="server { ... }"
+              />
+            </div>
+          </div>
+        </details>
 
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">

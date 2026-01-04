@@ -66,6 +66,12 @@ export default function TemplatesPage() {
               ← Back to settings
             </a>
             <Link
+              href="/templates/bulk"
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600"
+            >
+              Bulk import
+            </Link>
+            <Link
               href="/templates/new"
               className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
             >

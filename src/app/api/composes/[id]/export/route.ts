@@ -82,6 +82,22 @@ export async function GET(
     });
   }
 
+  const nginxConfig = config.nginx;
+  if (nginxConfig) {
+    if (nginxConfig.config?.trim()) {
+      archive.append(nginxConfig.config, { name: "nginx/nginx.conf" });
+    }
+    if (nginxConfig.cert?.trim()) {
+      archive.append(nginxConfig.cert, { name: "nginx/ssl/cert.crt" });
+    }
+    if (nginxConfig.key?.trim()) {
+      archive.append(nginxConfig.key, { name: "nginx/ssl/key.key" });
+    }
+    if (nginxConfig.ca?.trim()) {
+      archive.append(nginxConfig.ca, { name: "nginx/ssl/ca.crt" });
+    }
+  }
+
   await archive.finalize();
   const buffer = await bufferFromStream(stream);
 

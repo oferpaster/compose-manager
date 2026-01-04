@@ -9,6 +9,7 @@ export type ServiceCatalogItem = {
   defaultEnv?: Record<string, string>;
   defaultContainerName?: string;
   defaultNetworks?: string[];
+  defaultRestart?: string;
   springBoot?: boolean;
   propertiesTemplateFile?: string;
   applicationPropertiesTemplate?: string;

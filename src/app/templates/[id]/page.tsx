@@ -15,6 +15,7 @@ const emptyService = (): ServiceCatalogItem => ({
   defaultEnv: {},
   defaultContainerName: "",
   defaultNetworks: [],
+  defaultRestart: "",
   springBoot: false,
   propertiesTemplateFile: "",
   applicationPropertiesTemplate: "",
@@ -215,6 +216,22 @@ export default function TemplateEditorPage() {
               >
                 <option value="no">No</option>
                 <option value="yes">Yes</option>
+              </select>
+            </label>
+            <label className="text-sm text-slate-600">
+              Default restart policy
+              <select
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                value={service.defaultRestart || ""}
+                onChange={(event) =>
+                  setService({ ...service, defaultRestart: event.target.value })
+                }
+              >
+                <option value="">Default</option>
+                <option value="no">No</option>
+                <option value="always">Always</option>
+                <option value="on-failure">On failure</option>
+                <option value="unless-stopped">Unless stopped</option>
               </select>
             </label>
             {service.springBoot ? null : (

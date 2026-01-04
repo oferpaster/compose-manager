@@ -36,6 +36,12 @@ export type ComposeConfig = {
   networks: string[];
   services: ServiceConfig[];
   scriptIds?: string[];
+  nginx?: {
+    cert?: string;
+    key?: string;
+    ca?: string;
+    config?: string;
+  };
 };
 
 export function createEmptyCompose(name: string): ComposeConfig {
@@ -47,6 +53,12 @@ export function createEmptyCompose(name: string): ComposeConfig {
     networks: ["backend"],
     services: [],
     scriptIds: [],
+    nginx: {
+      cert: "",
+      key: "",
+      ca: "",
+      config: "",
+    },
   };
 }
 
@@ -55,6 +67,12 @@ export function normalizeComposeConfig(config: ComposeConfig): ComposeConfig {
   const networks = Array.isArray(config.networks) ? config.networks : [];
   const servicesInput = Array.isArray(config.services) ? config.services : [];
   const scriptIds = Array.isArray(config.scriptIds) ? config.scriptIds : [];
+  const nginx = {
+    cert: config.nginx?.cert || "",
+    key: config.nginx?.key || "",
+    ca: config.nginx?.ca || "",
+    config: config.nginx?.config || "",
+  };
   const usedNames = new Set<string>();
   const counters: Record<string, number> = {};
 
@@ -101,7 +119,7 @@ export function normalizeComposeConfig(config: ComposeConfig): ComposeConfig {
     }
   });
 
-  return { ...config, globalEnv, networks, services, scriptIds };
+  return { ...config, globalEnv, networks, services, scriptIds, nginx };
 }
 
 export function createServiceConfig(
@@ -123,6 +141,7 @@ export function createServiceConfig(
       ? Object.entries(service.defaultEnv).map(([key, value]) => ({ key, value }))
       : [],
     networks: service.defaultNetworks ? [...service.defaultNetworks] : [],
+    restart: service.defaultRestart || "",
     hostname: "",
     privileged: false,
     restart: "",
