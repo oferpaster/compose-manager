@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { ComposeConfig, generateComposeYaml, generateEnvFile } from "./compose";
 import { findServiceById, loadCatalog } from "./catalogStore";
+import { loadNetworks } from "./networkStore";
 
 const COMPOSE_ROOT = path.join(process.cwd(), "data", "compose-files");
 
@@ -16,7 +17,7 @@ export function saveComposeAssets(config: ComposeConfig) {
   const composeDir = path.join(COMPOSE_ROOT, config.id);
   ensureDir(composeDir);
 
-  const composeYaml = generateComposeYaml(config, loadCatalog());
+  const composeYaml = generateComposeYaml(config, loadCatalog(), loadNetworks());
   const envFile = generateEnvFile(config);
 
   fs.writeFileSync(path.join(composeDir, "docker-compose.yml"), composeYaml, "utf8");

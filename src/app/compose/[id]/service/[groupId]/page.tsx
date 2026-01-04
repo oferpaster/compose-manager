@@ -8,7 +8,7 @@ import { ServiceCatalogItem } from "@/lib/serviceCatalog";
 
 type CatalogResponse = {
   services: ServiceCatalogItem[];
-  networks: string[];
+  networks: { name: string; driver?: string }[];
 };
 
 export default function EditServiceGroupPage() {
@@ -172,7 +172,7 @@ export default function EditServiceGroupPage() {
               key={instance.id}
               service={instance}
               catalog={catalog.services}
-              networks={catalog.networks}
+              networks={catalog.networks.map((network) => network.name)}
               onChange={(next) => updateInstance(instance.id, next)}
               onRemove={instances.length > 1 ? () => removeInstance(instance.id) : undefined}
               onLoadTemplate={loadTemplate}

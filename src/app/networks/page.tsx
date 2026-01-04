@@ -3,23 +3,26 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+type NetworkConfig = { name: string; driver?: string };
+
 export default function NetworksPage() {
-  const [networks, setNetworks] = useState<string[]>([]);
+  const [networks, setNetworks] = useState<NetworkConfig[]>([]);
   const [newNetwork, setNewNetwork] = useState("");
+  const [newDriver, setNewDriver] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
 
   useEffect(() => {
     async function load() {
       const response = await fetch("/api/networks");
-      const data = (await response.json()) as { networks: string[] };
+      const data = (await response.json()) as { networks: NetworkConfig[] };
       setNetworks(data.networks || []);
     }
 
     load().catch(() => null);
   }, []);
 
-  const handleSave = async (next: string[]) => {
+  const handleSave = async (next: NetworkConfig[]) => {
     setIsSaving(true);
     setSaveMessage("");
     try {
@@ -44,18 +47,28 @@ export default function NetworksPage() {
   const handleAdd = async () => {
     const name = newNetwork.trim();
     if (!name) return;
-    if (networks.includes(name)) {
+    if (networks.some((network) => network.name === name)) {
       setSaveMessage("Network already exists");
       return;
     }
-    const next = [...networks, name];
+    const driver = newDriver.trim();
+    const next = [...networks, { name, driver: driver || undefined }];
     setNewNetwork("");
+    setNewDriver("");
     await handleSave(next);
   };
 
   const handleRemove = async (name: string) => {
-    const next = networks.filter((network) => network !== name);
+    const next = networks.filter((network) => network.name !== name);
     await handleSave(next);
+  };
+
+  const handleDriverChange = (name: string, driver: string) => {
+    setNetworks((prev) =>
+      prev.map((network) =>
+        network.name === name ? { ...network, driver: driver.trim() || undefined } : network
+      )
+    );
   };
 
   return (
@@ -87,6 +100,15 @@ export default function NetworksPage() {
                 placeholder="backend"
               />
             </label>
+            <label className="text-sm text-slate-600">
+              Driver
+              <input
+                className="mt-2 w-full min-w-[220px] rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                value={newDriver}
+                onChange={(event) => setNewDriver(event.target.value)}
+                placeholder="bridge"
+              />
+            </label>
             <button
               onClick={handleAdd}
               className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
@@ -102,12 +124,23 @@ export default function NetworksPage() {
             ) : (
               networks.map((network) => (
                 <div
-                  key={network}
+                  key={network.name}
                   className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
                 >
-                  <span className="text-sm text-slate-700">{network}</span>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-sm font-semibold text-slate-700">{network.name}</span>
+                    <input
+                      className="w-48 rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-700"
+                      placeholder="driver"
+                      value={network.driver || ""}
+                      onChange={(event) =>
+                        handleDriverChange(network.name, event.target.value)
+                      }
+                      onBlur={() => handleSave(networks)}
+                    />
+                  </div>
                   <button
-                    onClick={() => handleRemove(network)}
+                    onClick={() => handleRemove(network.name)}
                     className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-600"
                     disabled={isSaving}
                   >

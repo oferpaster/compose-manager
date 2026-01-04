@@ -13,9 +13,24 @@ const emptyService = (): ServiceCatalogItem => ({
   defaultPorts: [],
   defaultVolumes: [],
   defaultEnv: {},
+  defaultEnvFile: [],
   defaultContainerName: "",
   defaultNetworks: [],
   defaultRestart: "",
+  defaultPrivileged: false,
+  defaultPid: "",
+  defaultUser: "",
+  defaultHostname: "",
+  defaultCommand: "",
+  defaultEntrypoint: "",
+  defaultNetworkMode: "",
+  defaultCapAdd: [],
+  defaultLogging: "",
+  defaultHealthcheckTest: "",
+  defaultHealthcheckInterval: "",
+  defaultHealthcheckTimeout: "",
+  defaultHealthcheckRetries: undefined,
+  defaultHealthcheckStartPeriod: "",
   springBoot: false,
   propertiesTemplateFile: "",
   applicationPropertiesTemplate: "",
@@ -50,8 +65,8 @@ export default function TemplateEditorPage() {
   useEffect(() => {
     async function loadNetworks() {
       const response = await fetch("/api/networks");
-      const data = (await response.json()) as { networks: string[] };
-      setNetworks(data.networks || []);
+      const data = (await response.json()) as { networks: { name: string }[] };
+      setNetworks((data.networks || []).map((network) => network.name));
     }
 
     loadNetworks().catch(() => null);
@@ -234,6 +249,77 @@ export default function TemplateEditorPage() {
                 <option value="unless-stopped">Unless stopped</option>
               </select>
             </label>
+            <label className="text-sm text-slate-600">
+              Default privileged
+              <select
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                value={service.defaultPrivileged ? "yes" : "no"}
+                onChange={(event) =>
+                  setService({
+                    ...service,
+                    defaultPrivileged: event.target.value === "yes",
+                  })
+                }
+              >
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </select>
+            </label>
+            <label className="text-sm text-slate-600">
+              Default hostname
+              <input
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                value={service.defaultHostname || ""}
+                onChange={(event) =>
+                  setService({ ...service, defaultHostname: event.target.value })
+                }
+                placeholder="optional"
+              />
+            </label>
+            <label className="text-sm text-slate-600">
+              Default user
+              <input
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                value={service.defaultUser || ""}
+                onChange={(event) =>
+                  setService({ ...service, defaultUser: event.target.value })
+                }
+                placeholder="1000:1000"
+              />
+            </label>
+            <label className="text-sm text-slate-600">
+              Default PID mode
+              <input
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                value={service.defaultPid || ""}
+                onChange={(event) =>
+                  setService({ ...service, defaultPid: event.target.value })
+                }
+                placeholder="host"
+              />
+            </label>
+            <label className="text-sm text-slate-600 md:col-span-2">
+              Default command
+              <input
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                value={service.defaultCommand || ""}
+                onChange={(event) =>
+                  setService({ ...service, defaultCommand: event.target.value })
+                }
+                placeholder="./start.sh"
+              />
+            </label>
+            <label className="text-sm text-slate-600 md:col-span-2">
+              Default entrypoint
+              <input
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                value={service.defaultEntrypoint || ""}
+                onChange={(event) =>
+                  setService({ ...service, defaultEntrypoint: event.target.value })
+                }
+                placeholder="/bin/app"
+              />
+            </label>
             {service.springBoot ? null : (
               <label className="text-sm text-slate-600 md:col-span-2">
                 application.properties template path
@@ -303,6 +389,23 @@ export default function TemplateEditorPage() {
                 placeholder="./data:/var/lib/app"
               />
             </label>
+            <label className="text-sm text-slate-600">
+              Default env_file (one per line)
+              <textarea
+                className="mt-2 min-h-[120px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                value={(service.defaultEnvFile || []).join("\n")}
+                onChange={(event) =>
+                  setService({
+                    ...service,
+                    defaultEnvFile: event.target.value
+                      .split("\n")
+                      .map((item) => item.trim())
+                      .filter(Boolean),
+                  })
+                }
+                placeholder="./app.env"
+              />
+            </label>
             <div className="space-y-2">
               <p className="text-sm text-slate-600">Default networks</p>
               <div className="flex flex-wrap gap-2">
@@ -331,6 +434,123 @@ export default function TemplateEditorPage() {
                 })}
               </div>
             </div>
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <label className="text-sm text-slate-600">
+              Default network_mode
+              <input
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                value={service.defaultNetworkMode || ""}
+                onChange={(event) =>
+                  setService({ ...service, defaultNetworkMode: event.target.value })
+                }
+                placeholder="host"
+              />
+            </label>
+            <label className="text-sm text-slate-600">
+              Default cap_add (one per line)
+              <textarea
+                className="mt-2 min-h-[120px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                value={(service.defaultCapAdd || []).join("\n")}
+                onChange={(event) =>
+                  setService({
+                    ...service,
+                    defaultCapAdd: event.target.value
+                      .split("\n")
+                      .map((item) => item.trim())
+                      .filter(Boolean),
+                  })
+                }
+                placeholder="NET_ADMIN"
+              />
+            </label>
+          </div>
+
+          <div className="mt-4">
+            <label className="text-sm text-slate-600">
+              Default logging (YAML)
+              <textarea
+                className="mt-2 min-h-[120px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
+                value={service.defaultLogging || ""}
+                onChange={(event) =>
+                  setService({ ...service, defaultLogging: event.target.value })
+                }
+                placeholder={`driver: local\noptions:\n  max-size: \"10m\"`}
+              />
+            </label>
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <label className="text-sm text-slate-600">
+              Default healthcheck test
+              <input
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                value={service.defaultHealthcheckTest || ""}
+                onChange={(event) =>
+                  setService({ ...service, defaultHealthcheckTest: event.target.value })
+                }
+                placeholder="CMD-SHELL curl -f http://localhost:8080/actuator/health || exit 1"
+              />
+            </label>
+            <label className="text-sm text-slate-600">
+              Default healthcheck interval
+              <input
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                value={service.defaultHealthcheckInterval || ""}
+                onChange={(event) =>
+                  setService({
+                    ...service,
+                    defaultHealthcheckInterval: event.target.value,
+                  })
+                }
+                placeholder="30s"
+              />
+            </label>
+            <label className="text-sm text-slate-600">
+              Default healthcheck timeout
+              <input
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                value={service.defaultHealthcheckTimeout || ""}
+                onChange={(event) =>
+                  setService({
+                    ...service,
+                    defaultHealthcheckTimeout: event.target.value,
+                  })
+                }
+                placeholder="10s"
+              />
+            </label>
+            <label className="text-sm text-slate-600">
+              Default healthcheck retries
+              <input
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                type="number"
+                value={service.defaultHealthcheckRetries ?? ""}
+                onChange={(event) => {
+                  const raw = event.target.value;
+                  setService({
+                    ...service,
+                    defaultHealthcheckRetries: raw === "" ? undefined : Number(raw),
+                  });
+                }}
+                placeholder="3"
+              />
+            </label>
+            <label className="text-sm text-slate-600">
+              Default healthcheck start_period
+              <input
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                value={service.defaultHealthcheckStartPeriod || ""}
+                onChange={(event) =>
+                  setService({
+                    ...service,
+                    defaultHealthcheckStartPeriod: event.target.value,
+                  })
+                }
+                placeholder="30s"
+              />
+            </label>
           </div>
 
           <div className="mt-4">

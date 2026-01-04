@@ -41,7 +41,10 @@ export default function ServiceInstanceEditor({
       service.env.filter((_, idx) => idx !== index)
     );
 
-  const updateList = (key: "ports" | "volumes" | "extraHosts" | "dependsOn", value: string) => {
+  const updateList = (
+    key: "ports" | "volumes" | "extraHosts" | "dependsOn" | "envFile" | "capAdd",
+    value: string
+  ) => {
     updateField(key, value.split("\n").map((item) => item.trim()).filter(Boolean));
   };
 
@@ -51,6 +54,20 @@ export default function ServiceInstanceEditor({
       ? service.networks.filter((item) => item !== network)
       : [...service.networks, network];
     updateField("networks", next);
+  };
+
+  const updateHealthcheck = <K extends keyof ServiceConfig["healthcheck"]>(
+    key: K,
+    value: ServiceConfig["healthcheck"][K]
+  ) => {
+    const current = service.healthcheck || {
+      test: "",
+      interval: "",
+      timeout: "",
+      retries: null,
+      startPeriod: "",
+    };
+    updateField("healthcheck", { ...current, [key]: value });
   };
 
   useEffect(() => {
@@ -168,6 +185,100 @@ export default function ServiceInstanceEditor({
         </label>
       </div>
 
+      <div className="grid gap-4 md:grid-cols-2">
+        <label className="text-sm text-slate-600">
+          env_file (one per line)
+          <textarea
+            className="mt-2 min-h-[90px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+            value={service.envFile.join("\n")}
+            onChange={(event) => updateList("envFile", event.target.value)}
+            placeholder="./app.env"
+          />
+        </label>
+        <label className="text-sm text-slate-600">
+          network_mode
+          <input
+            className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+            value={service.networkMode || ""}
+            onChange={(event) => updateField("networkMode", event.target.value)}
+            placeholder="host"
+          />
+        </label>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <label className="text-sm text-slate-600">
+          cap_add (one per line)
+          <textarea
+            className="mt-2 min-h-[90px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+            value={service.capAdd.join("\n")}
+            onChange={(event) => updateList("capAdd", event.target.value)}
+            placeholder="NET_ADMIN"
+          />
+        </label>
+        <label className="text-sm text-slate-600">
+          logging (YAML)
+          <textarea
+            className="mt-2 min-h-[90px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
+            value={service.logging || ""}
+            onChange={(event) => updateField("logging", event.target.value)}
+            placeholder={`driver: local\\noptions:\\n  max-size: \"10m\"`}
+          />
+        </label>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <label className="text-sm text-slate-600">
+          healthcheck test
+          <input
+            className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+            value={service.healthcheck?.test || ""}
+            onChange={(event) => updateHealthcheck("test", event.target.value)}
+            placeholder="CMD-SHELL curl -f http://localhost:8080/health || exit 1"
+          />
+        </label>
+        <label className="text-sm text-slate-600">
+          healthcheck interval
+          <input
+            className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+            value={service.healthcheck?.interval || ""}
+            onChange={(event) => updateHealthcheck("interval", event.target.value)}
+            placeholder="30s"
+          />
+        </label>
+        <label className="text-sm text-slate-600">
+          healthcheck timeout
+          <input
+            className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+            value={service.healthcheck?.timeout || ""}
+            onChange={(event) => updateHealthcheck("timeout", event.target.value)}
+            placeholder="10s"
+          />
+        </label>
+        <label className="text-sm text-slate-600">
+          healthcheck retries
+          <input
+            className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+            type="number"
+            value={service.healthcheck?.retries ?? ""}
+            onChange={(event) => {
+              const raw = event.target.value;
+              updateHealthcheck("retries", raw === "" ? null : Number(raw));
+            }}
+            placeholder="3"
+          />
+        </label>
+        <label className="text-sm text-slate-600">
+          healthcheck start_period
+          <input
+            className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+            value={service.healthcheck?.startPeriod || ""}
+            onChange={(event) => updateHealthcheck("startPeriod", event.target.value)}
+            placeholder="30s"
+          />
+        </label>
+      </div>
+
       <div className="space-y-3">
         <h4 className="text-sm font-semibold text-slate-700">Environment (service)</h4>
         {service.env.map((entry, index) => (
@@ -227,6 +338,27 @@ export default function ServiceInstanceEditor({
             value={service.hostname || ""}
             onChange={(event) => updateField("hostname", event.target.value)}
             placeholder="optional"
+          />
+        </label>
+        <label className="text-sm text-slate-600">
+          User
+          <input
+            className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+            value={service.user || ""}
+            onChange={(event) => updateField("user", event.target.value)}
+            placeholder="1000:1000"
+          />
+        </label>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <label className="text-sm text-slate-600">
+          PID mode
+          <input
+            className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+            value={service.pid || ""}
+            onChange={(event) => updateField("pid", event.target.value)}
+            placeholder="host"
           />
         </label>
         <label className="text-sm text-slate-600">

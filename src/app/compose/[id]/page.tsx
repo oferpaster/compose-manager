@@ -60,8 +60,8 @@ export default function ComposeDetailPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-12">
-      <div className="w-full">
+    <main className="h-screen overflow-hidden bg-slate-50 px-6 py-12">
+      <div className="h-full w-full">
         <ComposeEditor initialConfig={config} onSave={handleSave} />
       </div>
     </main>
