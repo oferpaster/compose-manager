@@ -5,7 +5,8 @@ import path from "path";
 import { PassThrough } from "stream";
 import { getDb } from "@/lib/db";
 import { saveComposeAssets } from "@/lib/storage";
-import { ComposeConfig } from "@/lib/compose";
+import { ComposeConfig, generatePrometheusYaml } from "@/lib/compose";
+import { loadCatalog } from "@/lib/catalogStore";
 
 function bufferFromStream(stream: PassThrough) {
   return new Promise<Buffer>((resolve, reject) => {
@@ -95,6 +96,14 @@ export async function GET(
     }
     if (nginxConfig.ca?.trim()) {
       archive.append(nginxConfig.ca, { name: "nginx/ssl/ca.crt" });
+    }
+  }
+
+  if (config.prometheus?.enabled) {
+    const prometheusYaml =
+      config.prometheus.configYaml?.trim() || generatePrometheusYaml(config, loadCatalog());
+    if (prometheusYaml.trim()) {
+      archive.append(prometheusYaml, { name: "prometheus/prometheus.yml" });
     }
   }
 

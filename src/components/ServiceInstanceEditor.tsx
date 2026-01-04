@@ -206,6 +206,80 @@ export default function ServiceInstanceEditor({
         </label>
       </div>
 
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h4 className="text-sm font-semibold text-slate-700">
+              Prometheus metrics
+            </h4>
+            <p className="text-xs text-slate-500">
+              Configure scrape job for this service.
+            </p>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            <input
+              type="checkbox"
+              checked={Boolean(service.prometheusEnabled)}
+              onChange={(event) =>
+                updateField("prometheusEnabled", event.target.checked)
+              }
+            />
+            Enable
+          </label>
+        </div>
+        {service.prometheusEnabled ? (
+          <div className="mt-3 grid gap-4 md:grid-cols-2">
+            <label className="text-sm text-slate-600">
+              Metrics port
+              <input
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                value={service.prometheusPort || ""}
+                onChange={(event) => updateField("prometheusPort", event.target.value)}
+                placeholder="8080"
+              />
+            </label>
+            <label className="text-sm text-slate-600">
+              Metrics path
+              <input
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                value={service.prometheusMetricsPath || ""}
+                onChange={(event) =>
+                  updateField("prometheusMetricsPath", event.target.value)
+                }
+                placeholder={serviceInfo?.springBoot ? "/actuator/metrics" : "/metrics"}
+              />
+            </label>
+            <label className="text-sm text-slate-600">
+              Scrape interval
+              <input
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                value={service.prometheusScrapeInterval || ""}
+                onChange={(event) =>
+                  updateField("prometheusScrapeInterval", event.target.value)
+                }
+                placeholder="5s"
+              />
+            </label>
+            <label className="text-sm text-slate-600 md:col-span-2">
+              Job preview
+              <textarea
+                className="mt-2 min-h-[120px] w-full rounded-lg border border-slate-200 bg-white/80 px-3 py-2 text-xs font-mono text-slate-700"
+                value={`- job_name: '${service.name}'\n  metrics_path: '${
+                  service.prometheusMetricsPath ||
+                  (serviceInfo?.springBoot ? "/actuator/metrics" : "")
+                }'\n  scrape_interval: '${
+                  service.prometheusScrapeInterval ||
+                  (serviceInfo?.springBoot ? "5s" : "")
+                }'\n  static_configs:\n    - targets: ['${service.name}:${
+                  service.prometheusPort || "PORT"
+                }']`}
+                readOnly
+              />
+            </label>
+          </div>
+        ) : null}
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2">
         <label className="text-sm text-slate-600">
           cap_add (one per line)

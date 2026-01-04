@@ -27,6 +27,10 @@ const emptyService = (): ServiceCatalogItem => ({
   defaultNetworkMode: "",
   defaultCapAdd: [],
   defaultLogging: "",
+  defaultPrometheusEnabled: false,
+  defaultPrometheusPort: "",
+  defaultPrometheusMetricsPath: "",
+  defaultPrometheusScrapeInterval: "",
   defaultHealthcheckTest: "",
   defaultHealthcheckInterval: "",
   defaultHealthcheckTimeout: "",
@@ -319,6 +323,10 @@ export default function BulkTemplatesPage() {
       base.defaultPid = pid;
       base.defaultUser = user;
       base.defaultPrivileged = privileged;
+      base.defaultPrometheusEnabled = false;
+      base.defaultPrometheusPort = "";
+      base.defaultPrometheusMetricsPath = "";
+      base.defaultPrometheusScrapeInterval = "";
       base.defaultContainerName = containerName;
       base.springBoot = springBoot;
 
@@ -455,6 +463,20 @@ export default function BulkTemplatesPage() {
             defaultPid: current.defaultPid || payload.defaultPid || "",
             defaultUser: current.defaultUser || payload.defaultUser || "",
             defaultHostname: current.defaultHostname || payload.defaultHostname || "",
+            defaultPrometheusEnabled:
+              typeof current.defaultPrometheusEnabled === "boolean"
+                ? current.defaultPrometheusEnabled
+                : payload.defaultPrometheusEnabled,
+            defaultPrometheusPort:
+              current.defaultPrometheusPort || payload.defaultPrometheusPort || "",
+            defaultPrometheusMetricsPath:
+              current.defaultPrometheusMetricsPath ||
+              payload.defaultPrometheusMetricsPath ||
+              "",
+            defaultPrometheusScrapeInterval:
+              current.defaultPrometheusScrapeInterval ||
+              payload.defaultPrometheusScrapeInterval ||
+              "",
           };
         } else {
           const id = payload.id.trim();
@@ -756,6 +778,77 @@ export default function BulkTemplatesPage() {
                         placeholder="host"
                       />
                     </label>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 md:col-span-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-700">
+                            Prometheus metrics
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            Defaults for scraped metrics.
+                          </p>
+                        </div>
+                        <label className="flex items-center gap-2 text-sm text-slate-600">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(service.defaultPrometheusEnabled)}
+                            onChange={(event) =>
+                              updateExtracted(index, {
+                                ...service,
+                                defaultPrometheusEnabled: event.target.checked,
+                              })
+                            }
+                          />
+                          Enable
+                        </label>
+                      </div>
+                      {service.defaultPrometheusEnabled ? (
+                        <div className="mt-3 grid gap-4 md:grid-cols-2">
+                          <label className="text-sm text-slate-600">
+                            Default metrics port
+                            <input
+                              className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                              value={service.defaultPrometheusPort || ""}
+                              onChange={(event) =>
+                                updateExtracted(index, {
+                                  ...service,
+                                  defaultPrometheusPort: event.target.value,
+                                })
+                              }
+                              placeholder="8080"
+                            />
+                          </label>
+                          <label className="text-sm text-slate-600">
+                            Default metrics path
+                            <input
+                              className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                              value={service.defaultPrometheusMetricsPath || ""}
+                              onChange={(event) =>
+                                updateExtracted(index, {
+                                  ...service,
+                                  defaultPrometheusMetricsPath: event.target.value,
+                                })
+                              }
+                              placeholder="/metrics"
+                            />
+                          </label>
+                          <label className="text-sm text-slate-600">
+                            Default scrape interval
+                            <input
+                              className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                              value={service.defaultPrometheusScrapeInterval || ""}
+                              onChange={(event) =>
+                                updateExtracted(index, {
+                                  ...service,
+                                  defaultPrometheusScrapeInterval: event.target.value,
+                                })
+                              }
+                              placeholder="5s"
+                            />
+                          </label>
+                        </div>
+                      ) : null}
+                    </div>
                     <label className="text-sm text-slate-600 md:col-span-2">
                       Default command
                       <input

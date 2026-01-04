@@ -6,6 +6,7 @@ import {
   ComposeConfig,
   generateEnvFile,
   generateComposeYaml,
+  generatePrometheusYaml,
   KeyValue,
   normalizeComposeConfig,
   parseComposeYamlToConfig,
@@ -87,6 +88,7 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
   const [yamlDraft, setYamlDraft] = useState("");
   const [yamlError, setYamlError] = useState("");
   const [serviceSearch, setServiceSearch] = useState("");
+  const [prometheusDraft, setPrometheusDraft] = useState("");
 
   useEffect(() => {
     setConfig(normalizeComposeConfig(initialConfig));
@@ -131,6 +133,12 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
     () => generateComposeYaml(config, catalog.services, catalog.networks),
     [config, catalog.services, catalog.networks]
   );
+  const prometheusYaml = useMemo(() => {
+    if (config.prometheus?.configYaml?.trim()) {
+      return config.prometheus.configYaml;
+    }
+    return generatePrometheusYaml(config, catalog.services);
+  }, [config, catalog.services]);
   const envFile = useMemo(() => generateEnvFile(config), [config]);
 
   const highlightLines = useMemo(() => {
@@ -238,6 +246,20 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
         key: prev.nginx?.key || "",
         ca: prev.nginx?.ca || "",
         config: prev.nginx?.config || "",
+        [field]: value,
+      },
+    }));
+  };
+
+  const updatePrometheus = (
+    field: "enabled" | "configYaml",
+    value: boolean | string
+  ) => {
+    setConfig((prev) => ({
+      ...prev,
+      prometheus: {
+        enabled: prev.prometheus?.enabled || false,
+        configYaml: prev.prometheus?.configYaml || "",
         [field]: value,
       },
     }));
@@ -618,6 +640,40 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
                 placeholder="server { ... }"
               />
             </div>
+          </div>
+        </details>
+
+        <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <summary className="flex cursor-pointer list-none items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Prometheus</h2>
+              <p className="text-xs uppercase tracking-widest text-slate-400">optional</p>
+            </div>
+            <span className="text-sm text-slate-500">Toggle</span>
+          </summary>
+          <div className="mt-4 space-y-4">
+            <label className="flex items-center gap-3 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={Boolean(config.prometheus?.enabled)}
+                onChange={(event) => updatePrometheus("enabled", event.target.checked)}
+              />
+              Enable Prometheus export
+            </label>
+            {config.prometheus?.enabled ? (
+              <label className="text-sm text-slate-600">
+                prometheus.yml (editable)
+                <textarea
+                  className="mt-2 min-h-[220px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
+                  value={prometheusDraft || prometheusYaml}
+                  onChange={(event) => {
+                    setPrometheusDraft(event.target.value);
+                    updatePrometheus("configYaml", event.target.value);
+                  }}
+                  onFocus={() => setPrometheusDraft(prometheusYaml)}
+                />
+              </label>
+            ) : null}
           </div>
         </details>
 

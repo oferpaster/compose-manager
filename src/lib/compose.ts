@@ -46,6 +46,10 @@ export type ServiceConfig = {
   dependsOn: string[];
   extraYaml: string;
   applicationProperties?: string;
+  prometheusEnabled?: boolean;
+  prometheusPort?: string;
+  prometheusMetricsPath?: string;
+  prometheusScrapeInterval?: string;
 };
 
 export type ComposeConfig = {
@@ -62,6 +66,10 @@ export type ComposeConfig = {
     key?: string;
     ca?: string;
     config?: string;
+  };
+  prometheus?: {
+    enabled?: boolean;
+    configYaml?: string;
   };
 };
 
@@ -86,6 +94,10 @@ export function createEmptyCompose(name: string): ComposeConfig {
       ca: "",
       config: "",
     },
+    prometheus: {
+      enabled: false,
+      configYaml: "",
+    },
   };
 }
 
@@ -103,6 +115,10 @@ export function normalizeComposeConfig(config: ComposeConfig): ComposeConfig {
     key: config.nginx?.key || "",
     ca: config.nginx?.ca || "",
     config: config.nginx?.config || "",
+  };
+  const prometheus = {
+    enabled: Boolean(config.prometheus?.enabled),
+    configYaml: config.prometheus?.configYaml || "",
   };
   const usedNames = new Set<string>();
   const counters: Record<string, number> = {};
@@ -157,6 +173,19 @@ export function normalizeComposeConfig(config: ComposeConfig): ComposeConfig {
         retries: null,
         startPeriod: "",
       },
+      prometheusEnabled: Boolean((rest as ServiceConfig).prometheusEnabled),
+      prometheusPort:
+        typeof (rest as ServiceConfig).prometheusPort === "string"
+          ? (rest as ServiceConfig).prometheusPort
+          : "",
+      prometheusMetricsPath:
+        typeof (rest as ServiceConfig).prometheusMetricsPath === "string"
+          ? (rest as ServiceConfig).prometheusMetricsPath
+          : "",
+      prometheusScrapeInterval:
+        typeof (rest as ServiceConfig).prometheusScrapeInterval === "string"
+          ? (rest as ServiceConfig).prometheusScrapeInterval
+          : "",
     };
 
     if (count === 1) {
@@ -180,7 +209,16 @@ export function normalizeComposeConfig(config: ComposeConfig): ComposeConfig {
     }
   });
 
-  return { ...config, globalEnv, networks, services, scriptIds, loggingTemplate, nginx };
+  return {
+    ...config,
+    globalEnv,
+    networks,
+    services,
+    scriptIds,
+    loggingTemplate,
+    nginx,
+    prometheus,
+  };
 }
 
 export function createServiceConfig(
@@ -227,6 +265,10 @@ export function createServiceConfig(
     dependsOn: [],
     extraYaml: "",
     applicationProperties: "",
+    prometheusEnabled: Boolean(service.defaultPrometheusEnabled),
+    prometheusPort: service.defaultPrometheusPort || "",
+    prometheusMetricsPath: service.defaultPrometheusMetricsPath || "",
+    prometheusScrapeInterval: service.defaultPrometheusScrapeInterval || "",
     ...overrides,
   };
 }
@@ -478,6 +520,63 @@ function splitImageTag(image: string) {
   return { name: image, tag: "latest" };
 }
 
+export function generatePrometheusYaml(config: ComposeConfig, catalog: ServiceCatalogItem[]) {
+  const escapeSingleQuotes = (value: string) => value.replace(/'/g, "''");
+  const lines: string[] = [];
+
+  lines.push("global:");
+  lines.push("  scrape_interval: 15s");
+  lines.push("  scrape_timeout: 10s");
+  lines.push("  evaluation_interval: 15s");
+  lines.push("");
+  lines.push("alerting:");
+  lines.push("  alertmanagers:");
+  lines.push("    - static_configs:");
+  lines.push("        - targets: []");
+  lines.push("      scheme: http");
+  lines.push("      timeout: 10s");
+  lines.push("      api_version: v2");
+  lines.push("");
+  lines.push("scrape_configs:");
+  lines.push("  - job_name: 'prometheus'");
+  lines.push("    honor_timestamps: true");
+  lines.push("    scrape_interval: 15s");
+  lines.push("    scrape_timeout: 10s");
+  lines.push("    metrics_path: '/metrics'");
+  lines.push("    scheme: http");
+  lines.push("    static_configs:");
+  lines.push("      - targets: ['localhost:9095']");
+
+  config.services.forEach((service) => {
+    if (!service.prometheusEnabled) return;
+    const serviceInfo = findServiceById(catalog, service.serviceId);
+    const metricsPath =
+      service.prometheusMetricsPath?.trim() ||
+      (serviceInfo?.springBoot ? "/actuator/metrics" : "");
+    if (!metricsPath) return;
+    const port = service.prometheusPort?.trim();
+    if (!port) return;
+
+    const scrapeInterval =
+      service.prometheusScrapeInterval?.trim() ||
+      (serviceInfo?.springBoot ? "5s" : "");
+
+    const safeJob = escapeSingleQuotes(service.name);
+    const safeMetrics = escapeSingleQuotes(metricsPath);
+    const safeTarget = escapeSingleQuotes(`${service.name}:${port}`);
+
+    lines.push(`  - job_name: '${safeJob}'`);
+    lines.push(`    metrics_path: '${safeMetrics}'`);
+    if (scrapeInterval) {
+      lines.push(`    scrape_interval: ${scrapeInterval}`);
+    }
+    lines.push("    static_configs:");
+    lines.push(`      - targets: ['${safeTarget}']`);
+  });
+
+  return lines.join("\n").trim();
+}
+
 function parseHealthcheck(value: unknown): HealthcheckConfig {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return { test: "", interval: "", timeout: "", retries: null, startPeriod: "" };
@@ -593,6 +692,8 @@ export function parseComposeYamlToConfig(
           applicationProperties: "",
         } as ServiceConfig);
 
+    const previous = previousByName.get(serviceName);
+
     const environment = parseEnvironment(serviceBody.environment);
     const ports = parseStringArray(serviceBody.ports);
     const volumes = parseStringArray(serviceBody.volumes);
@@ -626,9 +727,12 @@ export function parseComposeYamlToConfig(
       dependsOn,
       containerName:
         typeof serviceBody.container_name === "string" ? serviceBody.container_name : "",
+      prometheusEnabled: previous?.prometheusEnabled || false,
+      prometheusPort: previous?.prometheusPort || "",
+      prometheusMetricsPath: previous?.prometheusMetricsPath || "",
+      prometheusScrapeInterval: previous?.prometheusScrapeInterval || "",
     };
 
-    const previous = previousByName.get(serviceName);
     if (previous?.applicationProperties) {
       nextService.applicationProperties = previous.applicationProperties;
     }

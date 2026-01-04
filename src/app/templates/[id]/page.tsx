@@ -26,6 +26,10 @@ const emptyService = (): ServiceCatalogItem => ({
   defaultNetworkMode: "",
   defaultCapAdd: [],
   defaultLogging: "",
+  defaultPrometheusEnabled: false,
+  defaultPrometheusPort: "",
+  defaultPrometheusMetricsPath: "",
+  defaultPrometheusScrapeInterval: "",
   defaultHealthcheckTest: "",
   defaultHealthcheckInterval: "",
   defaultHealthcheckTimeout: "",
@@ -465,6 +469,78 @@ export default function TemplateEditorPage() {
                 placeholder="NET_ADMIN"
               />
             </label>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-700">
+                  Prometheus metrics
+                </p>
+                <p className="text-xs text-slate-500">
+                  Default scrape settings for this template.
+                </p>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={Boolean(service.defaultPrometheusEnabled)}
+                  onChange={(event) =>
+                    setService({
+                      ...service,
+                      defaultPrometheusEnabled: event.target.checked,
+                    })
+                  }
+                />
+                Enable
+              </label>
+            </div>
+            {service.defaultPrometheusEnabled ? (
+              <div className="mt-3 grid gap-4 md:grid-cols-2">
+                <label className="text-sm text-slate-600">
+                  Default metrics port
+                  <input
+                    className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                    value={service.defaultPrometheusPort || ""}
+                    onChange={(event) =>
+                      setService({
+                        ...service,
+                        defaultPrometheusPort: event.target.value,
+                      })
+                    }
+                    placeholder="8080"
+                  />
+                </label>
+                <label className="text-sm text-slate-600">
+                  Default metrics path
+                  <input
+                    className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                    value={service.defaultPrometheusMetricsPath || ""}
+                    onChange={(event) =>
+                      setService({
+                        ...service,
+                        defaultPrometheusMetricsPath: event.target.value,
+                      })
+                    }
+                    placeholder={service.springBoot ? "/actuator/metrics" : "/metrics"}
+                  />
+                </label>
+                <label className="text-sm text-slate-600">
+                  Default scrape interval
+                  <input
+                    className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                    value={service.defaultPrometheusScrapeInterval || ""}
+                    onChange={(event) =>
+                      setService({
+                        ...service,
+                        defaultPrometheusScrapeInterval: event.target.value,
+                      })
+                    }
+                    placeholder="5s"
+                  />
+                </label>
+              </div>
+            ) : null}
           </div>
 
           <div className="mt-4">

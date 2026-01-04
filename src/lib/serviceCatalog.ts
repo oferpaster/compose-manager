@@ -20,6 +20,10 @@ export type ServiceCatalogItem = {
   defaultNetworkMode?: string;
   defaultCapAdd?: string[];
   defaultLogging?: string;
+  defaultPrometheusEnabled?: boolean;
+  defaultPrometheusPort?: string;
+  defaultPrometheusMetricsPath?: string;
+  defaultPrometheusScrapeInterval?: string;
   defaultHealthcheckTest?: string;
   defaultHealthcheckInterval?: string;
   defaultHealthcheckTimeout?: string;
