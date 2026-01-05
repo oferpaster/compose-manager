@@ -67,9 +67,31 @@ export default function HomePage() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Link
+              href="/docs"
+              className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-6 py-2 text-sm font-semibold text-slate-600"
+            >
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className="mr-2 h-4 w-4"
+                fill="currentColor"
+              >
+                <path d="M6 2h9a2 2 0 0 1 1.41.59l4 4A2 2 0 0 1 21 8v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1v5h5l-5-5zM8 12a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2H9a1 1 0 0 1-1-1zm1 3a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2H9z" />
+              </svg>
+              Swagger Docs
+            </Link>
+            <Link
               href="/settings"
               className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-6 py-2 text-sm font-semibold text-slate-600"
             >
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className="mr-2 h-4 w-4"
+                fill="currentColor"
+              >
+                <path d="M12 8.5a3.5 3.5 0 1 1 0 7a3.5 3.5 0 0 1 0-7zm9 3.5a7.9 7.9 0 0 0-.08-1l2.02-1.57a1 1 0 0 0 .24-1.28l-1.92-3.32a1 1 0 0 0-1.2-.46l-2.38.96a8.1 8.1 0 0 0-1.74-1l-.36-2.54a1 1 0 0 0-.99-.85h-3.84a1 1 0 0 0-.99.85l-.36 2.54a8.1 8.1 0 0 0-1.74 1l-2.38-.96a1 1 0 0 0-1.2.46L1.98 8.15a1 1 0 0 0 .24 1.28l2.02 1.57a7.9 7.9 0 0 0 0 2l-2.02 1.57a1 1 0 0 0-.24 1.28l1.92 3.32a1 1 0 0 0 1.2.46l2.38-.96a8.1 8.1 0 0 0 1.74 1l.36 2.54a1 1 0 0 0 .99.85h3.84a1 1 0 0 0 .99-.85l.36-2.54a8.1 8.1 0 0 0 1.74-1l2.38.96a1 1 0 0 0 1.2-.46l1.92-3.32a1 1 0 0 0-.24-1.28l-2.02-1.57c.05-.33.08-.66.08-1z" />
+              </svg>
               Settings
             </Link>
           </div>

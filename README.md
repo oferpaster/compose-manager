@@ -17,6 +17,7 @@ ComposeBuilder is a Next.js app for building Docker Compose files from templates
 - Nginx config section (inline edits + export files)
 - Prometheus config (per-service toggle + global inline config)
 - Validation for missing/unused env vars across compose, .env, and application.properties
+- Swagger/OpenAPI docs at `/docs`
 
 ## Requirements
 
@@ -41,6 +42,10 @@ docker compose up --build
 ```
 
 The app will be available at http://localhost:3000
+
+## API docs
+
+Swagger UI is available at http://localhost:3000/docs
 
 ## Data persistence
 
