@@ -91,6 +91,8 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
   const [prometheusDraft, setPrometheusDraft] = useState("");
   const [isValidationOpen, setIsValidationOpen] = useState(false);
   const [isEditMenuOpen, setIsEditMenuOpen] = useState(false);
+  const [copiedCompose, setCopiedCompose] = useState(false);
+  const [copiedEnv, setCopiedEnv] = useState(false);
 
   useEffect(() => {
     setConfig(normalizeComposeConfig(initialConfig));
@@ -224,6 +226,21 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
     return highlighted;
   }, [composeYaml, groupedServices, hoveredGroupId]);
 
+  const handleCopy = async (text: string, type: "compose" | "env") => {
+    try {
+      await navigator.clipboard.writeText(text);
+      if (type === "compose") {
+        setCopiedCompose(true);
+        setTimeout(() => setCopiedCompose(false), 1500);
+      } else {
+        setCopiedEnv(true);
+        setTimeout(() => setCopiedEnv(false), 1500);
+      }
+    } catch {
+      // noop
+    }
+  };
+
   useEffect(() => {
     if (!hoveredGroupId) {
       setScrollTarget(null);
@@ -355,10 +372,25 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
   };
 
   const removeGroup = (groupId: string) => {
-    setConfig((prev) => ({
-      ...prev,
-      services: prev.services.filter((service) => service.groupId !== groupId),
-    }));
+    setConfig((prev) => {
+      const removedNames = new Set(
+        prev.services
+          .filter((service) => service.groupId === groupId)
+          .map((service) => service.name)
+      );
+      const remaining = prev.services
+        .filter((service) => service.groupId !== groupId)
+        .map((service) => ({
+          ...service,
+          dependsOn: service.dependsOn.filter(
+            (entry) => !removedNames.has(entry.name)
+          ),
+        }));
+      return {
+        ...prev,
+        services: remaining,
+      };
+    });
   };
 
   const moveGroup = (groupId: string, direction: "up" | "down") => {
@@ -683,8 +715,12 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
             <span className="text-sm text-slate-500">Toggle</span>
           </summary>
           <div className="mt-4 space-y-4">
-            {config.services.filter((service) => service.volumes.length > 0)
-              .length === 0 ? (
+            {config.services.filter((service) => {
+              const info = catalog.services.find((item) => item.id === service.serviceId);
+              const hasProps =
+                Boolean(info?.springBoot) && Boolean(service.applicationProperties);
+              return service.volumes.length > 0 || hasProps;
+            }).length === 0 ? (
               <p className="text-sm text-slate-500">No volumes mounted.</p>
             ) : (
               <div className="overflow-hidden rounded-xl border border-slate-200">
@@ -696,18 +732,28 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
                     </tr>
                   </thead>
                   <tbody>
-                    {config.services
-                      .filter((service) => service.volumes.length > 0)
-                      .map((service) => (
+                    {config.services.map((service) => {
+                      const info = catalog.services.find(
+                        (item) => item.id === service.serviceId
+                      );
+                      const volumes = [...service.volumes];
+                      if (info?.springBoot && service.applicationProperties) {
+                        volumes.push(
+                          `./${service.name}/application.properties:/opt/app/application.properties`
+                        );
+                      }
+                      if (volumes.length === 0) return null;
+                      return (
                         <tr key={`volumes-${service.id}`} className="border-t">
                           <td className="px-4 py-3 font-semibold text-slate-900">
                             {service.name}
                           </td>
                           <td className="px-4 py-3 text-slate-600">
-                            {service.volumes.join(", ")}
+                            {volumes.join(", ")}
                           </td>
                         </tr>
-                      ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1090,9 +1136,17 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
       <aside className="rounded-2xl border border-slate-200 bg-slate-950 p-5 text-white shadow-lg">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">docker-compose.yml</h2>
-          <span className="text-xs uppercase tracking-widest text-slate-300">
-            live
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleCopy(composeYaml, "compose")}
+              className="rounded-full border border-white/20 px-2 py-1 text-xs text-white/80 hover:bg-white/10"
+            >
+              {copiedCompose ? "Copied" : "Copy"}
+            </button>
+            <span className="text-xs uppercase tracking-widest text-slate-300">
+              live
+            </span>
+          </div>
         </div>
         <pre
           className="mt-4 h-[78vh] overflow-auto rounded-lg bg-black/40 p-4 text-xs leading-relaxed"
@@ -1119,9 +1173,17 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
       <aside className="rounded-2xl border border-slate-200 bg-slate-900 p-5 text-white shadow-lg">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">.env</h2>
-          <span className="text-xs uppercase tracking-widest text-slate-300">
-            live
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleCopy(envFile || "", "env")}
+              className="rounded-full border border-white/20 px-2 py-1 text-xs text-white/80 hover:bg-white/10"
+            >
+              {copiedEnv ? "Copied" : "Copy"}
+            </button>
+            <span className="text-xs uppercase tracking-widest text-slate-300">
+              live
+            </span>
+          </div>
         </div>
         <pre className="mt-4 h-[78vh] overflow-auto rounded-lg bg-black/40 p-4 text-xs leading-relaxed">
           {envFile || "# No global environment variables yet."}

@@ -56,6 +56,15 @@ export default function AddServicePage() {
     loadCompose().catch(() => setError("Failed to load compose"));
   }, [params.id]);
 
+  const availableServiceNames = useMemo(() => {
+    const names = new Set<string>();
+    if (compose) {
+      compose.services.forEach((service) => names.add(service.name));
+    }
+    instances.forEach((service) => names.add(service.name));
+    return Array.from(names);
+  }, [compose, instances]);
+
   const loadTemplate = async (serviceIdToLoad: string) => {
     if (templateCache[serviceIdToLoad]) return templateCache[serviceIdToLoad];
 
@@ -214,6 +223,7 @@ export default function AddServicePage() {
               service={instance}
               catalog={catalog.services}
               networks={catalog.networks.map((network) => network.name)}
+              availableServiceNames={availableServiceNames}
               onChange={(next) => updateInstance(instance.id, next)}
               onRemove={instances.length > 1 ? () => removeInstance(instance.id) : undefined}
               onLoadTemplate={loadTemplate}

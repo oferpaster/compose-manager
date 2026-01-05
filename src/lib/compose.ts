@@ -14,6 +14,11 @@ export type HealthcheckConfig = {
   startPeriod: string;
 };
 
+export type DependsOnConfig = {
+  name: string;
+  condition: string;
+};
+
 export type NetworkDefinition = {
   name: string;
   driver?: string;
@@ -43,7 +48,7 @@ export type ServiceConfig = {
   logging: string;
   healthcheck: HealthcheckConfig;
   extraHosts: string[];
-  dependsOn: string[];
+  dependsOn: DependsOnConfig[];
   extraYaml: string;
   applicationProperties?: string;
   prometheusEnabled?: boolean;
@@ -173,6 +178,17 @@ export function normalizeComposeConfig(config: ComposeConfig): ComposeConfig {
         retries: null,
         startPeriod: "",
       },
+      dependsOn: Array.isArray((rest as ServiceConfig).dependsOn)
+        ? (rest as ServiceConfig).dependsOn.map((entry) => {
+            if (typeof entry === "string") {
+              return { name: entry, condition: "service_started" };
+            }
+            const name = (entry as DependsOnConfig).name || "";
+            const condition =
+              (entry as DependsOnConfig).condition || "service_started";
+            return { name, condition };
+          })
+        : [],
       prometheusEnabled: Boolean((rest as ServiceConfig).prometheusEnabled),
       prometheusPort:
         typeof (rest as ServiceConfig).prometheusPort === "string"
@@ -376,6 +392,10 @@ export function generateComposeObject(
       healthcheck.retries = serviceConfig.healthcheck.retries;
     }
 
+    const dependsEntries = serviceConfig.dependsOn.filter(
+      (entry) => entry.name.trim().length > 0
+    );
+
     const baseService: Record<string, unknown> = {
       image: `${service.image}:${imageTag}`,
       container_name: serviceConfig.containerName?.trim() || undefined,
@@ -396,7 +416,17 @@ export function generateComposeObject(
       logging: logging || undefined,
       healthcheck: Object.keys(healthcheck).length ? healthcheck : undefined,
       extra_hosts: serviceConfig.extraHosts.length ? serviceConfig.extraHosts : undefined,
-      depends_on: serviceConfig.dependsOn.length ? serviceConfig.dependsOn : undefined,
+      depends_on: dependsEntries.length
+        ? dependsEntries.reduce<Record<string, { condition: string }>>(
+            (acc, entry) => {
+              acc[entry.name] = {
+                condition: entry.condition || "service_started",
+              };
+              return acc;
+            },
+            {}
+          )
+        : undefined,
     };
 
     const { merged, error } = mergeExtraYaml(baseService, serviceConfig.extraYaml);
@@ -501,6 +531,32 @@ function parseEnvironment(value: unknown): KeyValue[] {
 function parseLoggingYaml(value: unknown) {
   if (!value || typeof value !== "object") return "";
   return yamlStringify(value, { indent: 2, aliasDuplicateObjects: false }).trim();
+}
+
+function parseDependsOn(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map((item) => ({
+      name: String(item),
+      condition: "service_started",
+    }));
+  }
+  if (typeof value === "string") {
+    return [{ name: value, condition: "service_started" }];
+  }
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const entries = value as Record<string, { condition?: string } | string>;
+    return Object.keys(entries).map((name) => {
+      const entry = entries[name];
+      if (entry && typeof entry === "object" && !Array.isArray(entry)) {
+        return {
+          name,
+          condition: entry.condition || "service_started",
+        };
+      }
+      return { name, condition: "service_started" };
+    });
+  }
+  return [];
 }
 
 function parseCommand(value: unknown) {
@@ -699,7 +755,7 @@ export function parseComposeYamlToConfig(
     const volumes = parseStringArray(serviceBody.volumes);
     const networks = parseNetworks(serviceBody.networks);
     const extraHosts = parseStringArray(serviceBody.extra_hosts);
-    const dependsOn = parseStringArray(serviceBody.depends_on);
+    const depends = parseDependsOn(serviceBody.depends_on);
     const envFile = parseStringArray(serviceBody.env_file);
     const capAdd = parseStringArray(serviceBody.cap_add);
     const healthcheck = parseHealthcheck(serviceBody.healthcheck);
@@ -724,7 +780,7 @@ export function parseComposeYamlToConfig(
       logging: parseLoggingYaml(serviceBody.logging),
       healthcheck,
       extraHosts,
-      dependsOn,
+      dependsOn: depends,
       containerName:
         typeof serviceBody.container_name === "string" ? serviceBody.container_name : "",
       prometheusEnabled: previous?.prometheusEnabled || false,

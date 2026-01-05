@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import ServiceInstanceEditor from "@/components/ServiceInstanceEditor";
 import { ComposeConfig, normalizeComposeConfig, ServiceConfig } from "@/lib/compose";
@@ -75,6 +75,15 @@ export default function EditServiceGroupPage() {
     setInstances((prev) => prev.filter((item) => item.id !== id));
   };
 
+  const availableServiceNames = useMemo(() => {
+    const names = new Set<string>();
+    if (compose) {
+      compose.services.forEach((service) => names.add(service.name));
+    }
+    instances.forEach((service) => names.add(service.name));
+    return Array.from(names);
+  }, [compose, instances]);
+
   useEffect(() => {
     if (!instances.length) {
       setSelectedId(null);
@@ -133,10 +142,15 @@ export default function EditServiceGroupPage() {
         ...instances,
         ...remaining.slice(firstIndex),
       ];
+      const serviceNames = new Set(nextServices.map((service) => service.name));
+      const cleanedServices = nextServices.map((service) => ({
+        ...service,
+        dependsOn: service.dependsOn.filter((entry) => serviceNames.has(entry.name)),
+      }));
 
       const nextConfig: ComposeConfig = {
         ...compose,
-        services: nextServices,
+        services: cleanedServices,
       };
 
       const response = await fetch(`/api/composes/${params.id}`, {
@@ -285,6 +299,7 @@ export default function EditServiceGroupPage() {
                 }
                 catalog={catalog.services}
                 networks={catalog.networks.map((network) => network.name)}
+                availableServiceNames={availableServiceNames}
                 onChange={(next) => updateInstance(selectedId, next)}
                 onLoadTemplate={loadTemplate}
               />

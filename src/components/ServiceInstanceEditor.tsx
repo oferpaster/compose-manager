@@ -10,20 +10,25 @@ type Props = {
   service: ServiceConfig;
   catalog: ServiceCatalogItem[];
   networks: string[];
+  availableServiceNames?: string[];
   onChange: (service: ServiceConfig) => void;
   onRemove?: () => void;
   onLoadTemplate: (serviceId: string) => Promise<string>;
+  splitColumns?: boolean;
 };
 
 export default function ServiceInstanceEditor({
   service,
   catalog,
   networks,
+  availableServiceNames,
   onChange,
   onRemove,
   onLoadTemplate,
+  splitColumns = false,
 }: Props) {
   const serviceInfo = catalog.find((item) => item.id === service.serviceId);
+  const availableNames = Array.from(new Set(availableServiceNames || []));
 
   const updateField = <Key extends keyof ServiceConfig>(key: Key, value: ServiceConfig[Key]) => {
     onChange({ ...service, [key]: value });
@@ -42,7 +47,7 @@ export default function ServiceInstanceEditor({
     );
 
   const updateList = (
-    key: "ports" | "volumes" | "extraHosts" | "dependsOn" | "envFile" | "capAdd",
+    key: "ports" | "volumes" | "extraHosts" | "envFile" | "capAdd",
     value: string
   ) => {
     updateField(key, value.split("\n").map((item) => item.trim()).filter(Boolean));
@@ -79,7 +84,11 @@ export default function ServiceInstanceEditor({
   }, [serviceInfo, service.applicationProperties, onLoadTemplate]);
 
   return (
-    <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div
+      className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${
+        splitColumns ? "space-y-4 lg:columns-2 lg:[column-gap:1.5rem]" : "space-y-4"
+      }`}
+    >
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-widest text-slate-400">Instance</p>
@@ -467,15 +476,80 @@ export default function ServiceInstanceEditor({
         </label>
       </div>
 
-      <label className="text-sm text-slate-600">
-        Depends on (one per line)
-        <textarea
-          className="mt-2 min-h-[80px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-          value={service.dependsOn.join("\n")}
-          onChange={(event) => updateList("dependsOn", event.target.value)}
-          placeholder="postgres"
-        />
-      </label>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-semibold text-slate-700">Depends on</h4>
+          <button
+            onClick={() =>
+              updateField("dependsOn", [
+                ...service.dependsOn,
+                { name: "", condition: "service_started" },
+              ])
+            }
+            className="rounded-lg border border-dashed border-slate-300 px-3 py-1 text-xs text-slate-600"
+          >
+            + Add dependency
+          </button>
+        </div>
+        {service.dependsOn.length === 0 ? (
+          <p className="text-sm text-slate-500">No dependencies added.</p>
+        ) : (
+          service.dependsOn.map((entry, index) => (
+            <div key={`depends-${index}`} className="grid gap-3 md:grid-cols-[1fr_220px_auto]">
+              <select
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                value={entry.name}
+                onChange={(event) => {
+                  const next = [...service.dependsOn];
+                  next[index] = { ...entry, name: event.target.value };
+                  updateField("dependsOn", next);
+                }}
+              >
+                <option value="">Select service</option>
+                {availableNames
+                  .filter((name) => name !== service.name)
+                  .filter(
+                    (name) =>
+                      name === entry.name ||
+                      !service.dependsOn.some(
+                        (item, idx) => idx !== index && item.name === name
+                      )
+                  )
+                  .map((name) => (
+                    <option key={`dep-${service.id}-${index}-${name}`} value={name}>
+                      {name}
+                    </option>
+                  ))}
+              </select>
+              <select
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                value={entry.condition}
+                onChange={(event) => {
+                  const next = [...service.dependsOn];
+                  next[index] = { ...entry, condition: event.target.value };
+                  updateField("dependsOn", next);
+                }}
+              >
+                <option value="">No condition</option>
+                <option value="service_started">Service started</option>
+                <option value="service_healthy">Service healthy</option>
+                <option value="service_completed_successfully">
+                  Service completed successfully
+                </option>
+              </select>
+              <button
+                onClick={() => {
+                  const next = service.dependsOn.filter((_, idx) => idx !== index);
+                  updateField("dependsOn", next);
+                }}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600"
+              >
+                Remove
+              </button>
+            </div>
+          ))
+        )}
+      </div>
 
       <label className="text-sm text-slate-600">
         Extra YAML (service)
