@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import { pipeline } from "stream/promises";
 import { getDb } from "@/lib/db";
 import { ComposeConfig } from "@/lib/compose";
-import { buildComposeZipBuffer } from "@/lib/composeExport";
+import { createComposeArchiveStream, ExportOptions } from "@/lib/composeExport";
 
 const SNAPSHOT_DIR = path.join(process.cwd(), "data", "snapshots");
 
@@ -39,7 +40,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const body = (await request.json()) as { name?: string; description?: string };
+  const body = (await request.json()) as {
+    name?: string;
+    description?: string;
+    options?: Partial<ExportOptions>;
+  };
   const name = (body.name || "").trim();
   const description = (body.description || "").trim();
 
@@ -66,8 +71,12 @@ export async function POST(
   }
 
   const config = JSON.parse(row.config_json) as ComposeConfig;
-  const buffer = await buildComposeZipBuffer(config, id);
-
+  const options: ExportOptions = {
+    includeCompose: body.options?.includeCompose !== false,
+    includeConfigs: body.options?.includeConfigs !== false,
+    includeScripts: body.options?.includeScripts !== false,
+    includeUtilities: body.options?.includeUtilities !== false,
+  };
   ensureSnapshotDir();
   const snapshotId = crypto.randomUUID();
   const safeProject = row.project_name.replace(/[^a-zA-Z0-9_-]+/g, "-");
@@ -76,7 +85,9 @@ export async function POST(
   const fileName = `${safeProject}__${safeCompose}__${safeSnapshot}.zip`;
   const filePath = path.join(SNAPSHOT_DIR, `${snapshotId}.zip`);
 
-  fs.writeFileSync(filePath, buffer);
+  const archiveStream = await createComposeArchiveStream(config, id, options);
+  const fileStream = fs.createWriteStream(filePath);
+  await pipeline(archiveStream, fileStream);
 
   const createdAt = new Date().toISOString();
   db.prepare(

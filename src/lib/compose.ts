@@ -65,6 +65,7 @@ export type ComposeConfig = {
   networks: string[];
   services: ServiceConfig[];
   scriptIds?: string[];
+  utilityIds?: string[];
   loggingTemplate?: string;
   nginx?: {
     cert?: string;
@@ -92,6 +93,7 @@ export function createEmptyCompose(name: string): ComposeConfig {
     networks: ["backend"],
     services: [],
     scriptIds: [],
+    utilityIds: [],
     loggingTemplate: DEFAULT_LOGGING_TEMPLATE,
     nginx: {
       cert: "",
@@ -111,6 +113,7 @@ export function normalizeComposeConfig(config: ComposeConfig): ComposeConfig {
   const networks = Array.isArray(config.networks) ? config.networks : [];
   const servicesInput = Array.isArray(config.services) ? config.services : [];
   const scriptIds = Array.isArray(config.scriptIds) ? config.scriptIds : [];
+  const utilityIds = Array.isArray(config.utilityIds) ? config.utilityIds : [];
   const loggingTemplate =
     typeof config.loggingTemplate === "string" && config.loggingTemplate.trim().length > 0
       ? config.loggingTemplate
@@ -231,6 +234,7 @@ export function normalizeComposeConfig(config: ComposeConfig): ComposeConfig {
     networks,
     services,
     scriptIds,
+    utilityIds,
     loggingTemplate,
     nginx,
     prometheus,
@@ -469,10 +473,11 @@ export function generateComposeYaml(
 }
 
 export function generateEnvFile(config: ComposeConfig) {
-  return config.globalEnv
+  const envText = config.globalEnv
     .filter((entry) => entry.key.trim().length > 0)
     .map((entry) => `${entry.key}=${entry.value}`)
     .join("\n");
+  return envText.length ? `${envText}\n` : "";
 }
 
 export function parseEnvText(text: string): KeyValue[] {

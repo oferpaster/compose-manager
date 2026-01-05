@@ -40,6 +40,21 @@ export default function ProjectDetailPage() {
   const [snapshotName, setSnapshotName] = useState("");
   const [snapshotDescription, setSnapshotDescription] = useState("");
   const [snapshotSaving, setSnapshotSaving] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportTarget, setExportTarget] = useState<ComposeRow | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportOptions, setExportOptions] = useState({
+    includeCompose: true,
+    includeConfigs: true,
+    includeScripts: true,
+    includeUtilities: true,
+  });
+  const [snapshotOptions, setSnapshotOptions] = useState({
+    includeCompose: true,
+    includeConfigs: true,
+    includeScripts: true,
+    includeUtilities: true,
+  });
 
   useEffect(() => {
     async function load() {
@@ -79,24 +94,38 @@ export default function ProjectDetailPage() {
     setComposes((prev) => prev.filter((item) => item.id !== composeId));
   };
 
-  const handleExport = async (composeId: string, name: string) => {
-    const response = await fetch(`/api/composes/${composeId}/export`);
-    if (!response.ok) {
+  const handleExport = async () => {
+    if (!exportTarget || exporting) return;
+    setExporting(true);
+    setExportOpen(false);
+    try {
+      const response = await fetch(`/api/composes/${exportTarget.id}/export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(exportOptions),
+      });
+      if (!response.ok) {
+        setError("Failed to export compose");
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const projectName = project?.name || "project";
+      const safeProject = projectName.replace(/[^a-zA-Z0-9_-]+/g, "-");
+      const safeCompose = exportTarget.name.replace(/[^a-zA-Z0-9_-]+/g, "-");
+      link.download = `${safeProject}__${safeCompose}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setExportOpen(false);
+    } catch {
       setError("Failed to export compose");
-      return;
+    } finally {
+      setExporting(false);
     }
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    const projectName = project?.name || "project";
-    const safeProject = projectName.replace(/[^a-zA-Z0-9_-]+/g, "-");
-    const safeCompose = name.replace(/[^a-zA-Z0-9_-]+/g, "-");
-    link.download = `${safeProject}__${safeCompose}.zip`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
   };
 
   const openSnapshots = async (compose: ComposeRow) => {
@@ -105,6 +134,12 @@ export default function ProjectDetailPage() {
     setSnapshotsError("");
     setSnapshotName("");
     setSnapshotDescription("");
+    setSnapshotOptions({
+      includeCompose: true,
+      includeConfigs: true,
+      includeScripts: true,
+      includeUtilities: true,
+    });
     try {
       const response = await fetch(`/api/composes/${compose.id}/snapshots`);
       if (!response.ok) {
@@ -133,6 +168,7 @@ export default function ProjectDetailPage() {
         body: JSON.stringify({
           name,
           description: snapshotDescription.trim(),
+          options: snapshotOptions,
         }),
       });
       if (!response.ok) {
@@ -322,7 +358,16 @@ export default function ProjectDetailPage() {
                     Duplicate
                   </button>
                   <button
-                    onClick={() => handleExport(compose.id, compose.name)}
+                    onClick={() => {
+                      setExportTarget(compose);
+                      setExportOptions({
+                        includeCompose: true,
+                        includeConfigs: true,
+                        includeScripts: true,
+                        includeUtilities: true,
+                      });
+                      setExportOpen(true);
+                    }}
                     className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm text-emerald-700"
                   >
                     <svg
@@ -431,6 +476,7 @@ export default function ProjectDetailPage() {
               <button
                 onClick={() => setSnapshotsOpen(false)}
                 className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600"
+                disabled={snapshotSaving}
               >
                 Close
               </button>
@@ -454,6 +500,60 @@ export default function ProjectDetailPage() {
                   onChange={(event) => setSnapshotDescription(event.target.value)}
                   placeholder="What changed?"
                 />
+              </label>
+            </div>
+            <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 md:grid-cols-2">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={snapshotOptions.includeCompose}
+                  onChange={(event) =>
+                    setSnapshotOptions((prev) => ({
+                      ...prev,
+                      includeCompose: event.target.checked,
+                    }))
+                  }
+                />
+                Compose file
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={snapshotOptions.includeConfigs}
+                  onChange={(event) =>
+                    setSnapshotOptions((prev) => ({
+                      ...prev,
+                      includeConfigs: event.target.checked,
+                    }))
+                  }
+                />
+                Configurations
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={snapshotOptions.includeScripts}
+                  onChange={(event) =>
+                    setSnapshotOptions((prev) => ({
+                      ...prev,
+                      includeScripts: event.target.checked,
+                    }))
+                  }
+                />
+                Scripts
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={snapshotOptions.includeUtilities}
+                  onChange={(event) =>
+                    setSnapshotOptions((prev) => ({
+                      ...prev,
+                      includeUtilities: event.target.checked,
+                    }))
+                  }
+                />
+                Utilities
               </label>
             </div>
             <div className="mt-4 flex items-center justify-between gap-3">
@@ -516,6 +616,118 @@ export default function ProjectDetailPage() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {snapshotSaving ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4 py-8">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-xl">
+            <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-slate-700" />
+            <p className="text-sm font-semibold text-slate-900">Creating snapshot</p>
+            <p className="mt-1 text-xs text-slate-500">Please wait while we save the zip.</p>
+          </div>
+        </div>
+      ) : null}
+
+      {exportOpen && exportTarget ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-8">
+          <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Export</h2>
+                <p className="text-sm text-slate-500">
+                  {exportTarget.name} · {project.name}
+                </p>
+              </div>
+              <button
+                onClick={() => setExportOpen(false)}
+                className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600"
+                disabled={exporting}
+              >
+                Close
+              </button>
+            </div>
+            <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 md:grid-cols-2">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={exportOptions.includeCompose}
+                  onChange={(event) =>
+                    setExportOptions((prev) => ({
+                      ...prev,
+                      includeCompose: event.target.checked,
+                    }))
+                  }
+                />
+                Compose file
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={exportOptions.includeConfigs}
+                  onChange={(event) =>
+                    setExportOptions((prev) => ({
+                      ...prev,
+                      includeConfigs: event.target.checked,
+                    }))
+                  }
+                />
+                Configurations
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={exportOptions.includeScripts}
+                  onChange={(event) =>
+                    setExportOptions((prev) => ({
+                      ...prev,
+                      includeScripts: event.target.checked,
+                    }))
+                  }
+                />
+                Scripts
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={exportOptions.includeUtilities}
+                  onChange={(event) =>
+                    setExportOptions((prev) => ({
+                      ...prev,
+                      includeUtilities: event.target.checked,
+                    }))
+                  }
+                />
+                Utilities
+              </label>
+            </div>
+            <div className="mt-4 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setExportOpen(false)}
+                className="rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-600"
+                disabled={exporting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleExport}
+                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                disabled={exporting}
+              >
+                {exporting ? "Preparing..." : "Export"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {exporting ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4 py-8">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-xl">
+            <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-slate-700" />
+            <p className="text-sm font-semibold text-slate-900">Preparing download</p>
+            <p className="mt-1 text-xs text-slate-500">Please wait while we build the zip.</p>
           </div>
         </div>
       ) : null}

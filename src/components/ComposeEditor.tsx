@@ -28,6 +28,11 @@ type ScriptSummary = {
   description: string;
   usage: string;
 };
+type UtilitySummary = {
+  id: string;
+  name: string;
+  file_name: string;
+};
 
 type ServiceGroup = {
   groupId: string;
@@ -72,6 +77,7 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
     networks: [],
   });
   const [scripts, setScripts] = useState<ScriptSummary[]>([]);
+  const [utilities, setUtilities] = useState<UtilitySummary[]>([]);
   const [selectedService, setSelectedService] =
     useState<ServiceCatalogItem | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<string>("");
@@ -116,6 +122,16 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
     }
 
     loadScripts().catch(() => null);
+  }, []);
+
+  useEffect(() => {
+    async function loadUtilities() {
+      const response = await fetch("/api/utilities");
+      const data = (await response.json()) as { utilities: UtilitySummary[] };
+      setUtilities(data.utilities || []);
+    }
+
+    loadUtilities().catch(() => null);
   }, []);
 
   const groupedServices = useMemo<ServiceGroup[]>(
@@ -367,6 +383,19 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
         scriptIds: exists
           ? current.filter((item) => item !== scriptId)
           : [...current, scriptId],
+      };
+    });
+  };
+
+  const toggleUtility = (utilityId: string) => {
+    setConfig((prev) => {
+      const current = prev.utilityIds || [];
+      const exists = current.includes(utilityId);
+      return {
+        ...prev,
+        utilityIds: exists
+          ? current.filter((item) => item !== utilityId)
+          : [...current, utilityId],
       };
     });
   };
@@ -934,50 +963,102 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
           </div>
         </details>
 
-        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-900">Scripts</h2>
-            <span className="text-xs uppercase tracking-widest text-slate-400">
-              optional
-            </span>
-          </div>
-          {scripts.length === 0 ? (
-            <p className="text-sm text-slate-500">
-              No scripts yet. Add them in Settings → Scripts.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {scripts.map((script) => {
-                const selected = config.scriptIds?.includes(script.id);
-                return (
-                  <button
-                    key={script.id}
-                    onClick={() => toggleScript(script.id)}
-                    className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm ${
-                      selected
-                        ? "border-slate-900 bg-slate-900 text-white"
-                        : "border-slate-200 bg-white text-slate-700"
-                    }`}
-                  >
-                    <div>
-                      <p className="font-semibold">{script.name}</p>
-                      <p
-                        className={
-                          selected ? "text-slate-200" : "text-slate-500"
-                        }
-                      >
-                        {script.description || "No description"}
-                      </p>
-                    </div>
-                    <span className="text-xs uppercase tracking-widest">
-                      {selected ? "Selected" : "Select"}
-                    </span>
-                  </button>
-                );
-              })}
+        <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <summary className="flex cursor-pointer list-none items-center justify-between">
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-semibold text-slate-900">Scripts</h2>
+              <span className="text-xs uppercase tracking-widest text-slate-400">
+                optional
+              </span>
             </div>
-          )}
-        </section>
+            <span className="text-sm text-slate-500">Toggle</span>
+          </summary>
+          <div className="mt-4 space-y-4">
+            {scripts.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                No scripts yet. Add them in Settings → Scripts.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {scripts.map((script) => {
+                  const selected = config.scriptIds?.includes(script.id);
+                  return (
+                    <button
+                      key={script.id}
+                      onClick={() => toggleScript(script.id)}
+                      className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm ${
+                        selected
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-200 bg-white text-slate-700"
+                      }`}
+                    >
+                      <div>
+                        <p className="font-semibold">{script.name}</p>
+                        <p
+                          className={
+                            selected ? "text-slate-200" : "text-slate-500"
+                          }
+                        >
+                          {script.description || "No description"}
+                        </p>
+                      </div>
+                      <span className="text-xs uppercase tracking-widest">
+                        {selected ? "Selected" : "Select"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </details>
+
+        <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <summary className="flex cursor-pointer list-none items-center justify-between">
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-semibold text-slate-900">Utilities</h2>
+              <span className="text-xs uppercase tracking-widest text-slate-400">
+                optional
+              </span>
+            </div>
+            <span className="text-sm text-slate-500">Toggle</span>
+          </summary>
+          <div className="mt-4 space-y-4">
+            {utilities.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                No utilities yet. Add them in Settings → Utilities.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {utilities.map((utility) => {
+                  const selected = config.utilityIds?.includes(utility.id);
+                  const label = utility.name || utility.file_name;
+                  return (
+                    <button
+                      key={utility.id}
+                      onClick={() => toggleUtility(utility.id)}
+                      className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm ${
+                        selected
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-200 bg-white text-slate-700"
+                      }`}
+                    >
+                      <div>
+                        <p className="font-semibold">{label}</p>
+                        <p className={selected ? "text-slate-200" : "text-slate-500"}>
+                          {utility.file_name || "utility.bin"}
+                        </p>
+                      </div>
+                      <span className="text-xs uppercase tracking-widest">
+                        {selected ? "Selected" : "Select"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </details>
 
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">
