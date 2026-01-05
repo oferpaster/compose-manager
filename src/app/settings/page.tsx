@@ -6,8 +6,12 @@ export default function SettingsPage() {
       <div className="mx-auto w-full max-w-4xl space-y-6">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-sm uppercase tracking-widest text-slate-500">Settings</p>
-            <h1 className="text-3xl font-semibold text-slate-900">Project settings</h1>
+            <p className="text-sm uppercase tracking-widest text-slate-500">
+              Settings
+            </p>
+            <h1 className="text-3xl font-semibold text-slate-900">
+              Project settings
+            </h1>
           </div>
           <Link
             href="/"
@@ -25,7 +29,7 @@ export default function SettingsPage() {
           <div className="mt-4">
             <Link
               href="/templates"
-              className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
+              className="inline-flex border border-slate-200 items-center justify-center rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
             >
               Open templates
             </Link>
@@ -40,7 +44,7 @@ export default function SettingsPage() {
           <div className="mt-4">
             <Link
               href="/scripts"
-              className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
+              className="inline-flex border border-slate-200 items-center justify-center rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
             >
               Open scripts
             </Link>
@@ -55,7 +59,7 @@ export default function SettingsPage() {
           <div className="mt-4">
             <Link
               href="/utilities"
-              className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
+              className="inline-flex border border-slate-200 items-center justify-center rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
             >
               Open utilities
             </Link>
@@ -70,7 +74,7 @@ export default function SettingsPage() {
           <div className="mt-4">
             <Link
               href="/networks"
-              className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
+              className="inline-flex border border-slate-200 items-center justify-center rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
             >
               Open networks
             </Link>

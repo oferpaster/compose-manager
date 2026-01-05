@@ -36,7 +36,9 @@ export default function ScriptsPage() {
       <div className="mx-auto w-full max-w-6xl space-y-6">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-sm uppercase tracking-widest text-slate-500">Scripts</p>
+            <p className="text-sm uppercase tracking-widest text-slate-500">
+              Scripts
+            </p>
             <h1 className="text-3xl font-semibold text-slate-900">Utilities</h1>
           </div>
           <div className="flex items-center gap-3">
@@ -48,7 +50,7 @@ export default function ScriptsPage() {
             </Link>
             <Link
               href="/scripts/new"
-              className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
+              className="rounded-full border border-slate-200 bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
             >
               Add script
             </Link>
@@ -73,7 +75,9 @@ export default function ScriptsPage() {
                 className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
               >
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">{script.name}</p>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {script.name}
+                  </p>
                   <p className="text-xs text-slate-500">
                     {script.file_name || "script.sh"}
                   </p>

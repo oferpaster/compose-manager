@@ -222,10 +222,41 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
     const highlighted = new Set<number>();
 
     const getIndent = (line: string) => line.match(/^ */)?.[0].length ?? 0;
+    const findServicesIndent = () => {
+      for (let i = 0; i < lines.length; i += 1) {
+        if (lines[i].trim() === "services:") {
+          return { index: i, indent: getIndent(lines[i]) };
+        }
+      }
+      return null;
+    };
+    const servicesInfo = findServicesIndent();
+    if (!servicesInfo) return highlighted;
+
+    let serviceKeyIndent: number | null = null;
+    let inServices = false;
 
     lines.forEach((line, index) => {
+      if (index === servicesInfo.index) {
+        inServices = true;
+        return;
+      }
+      if (!inServices) return;
+
+      const indent = getIndent(line);
       const trimmed = line.trim();
+      if (trimmed.length === 0) return;
+      if (indent <= servicesInfo.indent) {
+        inServices = false;
+        return;
+      }
+
       if (!trimmed.endsWith(":")) return;
+      if (serviceKeyIndent === null) {
+        serviceKeyIndent = indent;
+      }
+      if (indent !== serviceKeyIndent) return;
+
       const name = trimmed.slice(0, -1);
       if (!targetNames.has(name)) return;
 
@@ -271,10 +302,50 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
       group.instances.map((instance) => instance.name)
     );
     const lines = composeYaml.split("\n");
-    const targetIndex = lines.findIndex((line) => {
+    const getIndent = (line: string) => line.match(/^ */)?.[0].length ?? 0;
+    const servicesInfo = (() => {
+      for (let i = 0; i < lines.length; i += 1) {
+        if (lines[i].trim() === "services:") {
+          return { index: i, indent: getIndent(lines[i]) };
+        }
+      }
+      return null;
+    })();
+    if (!servicesInfo) return;
+
+    let serviceKeyIndent: number | null = null;
+    let inServices = false;
+    let targetIndex = -1;
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      if (i === servicesInfo.index) {
+        inServices = true;
+        continue;
+      }
+      if (!inServices) continue;
+
+      const indent = getIndent(line);
       const trimmed = line.trim();
-      return trimmed.endsWith(":") && targetNames.has(trimmed.slice(0, -1));
-    });
+      if (trimmed.length === 0) continue;
+      if (indent <= servicesInfo.indent) {
+        inServices = false;
+        continue;
+      }
+
+      if (!trimmed.endsWith(":")) continue;
+      if (serviceKeyIndent === null) {
+        serviceKeyIndent = indent;
+      }
+      if (indent !== serviceKeyIndent) continue;
+
+      const name = trimmed.slice(0, -1);
+      if (targetNames.has(name)) {
+        targetIndex = i;
+        break;
+      }
+    }
+
     if (targetIndex >= 0) {
       setScrollTarget(targetIndex);
     }
@@ -578,7 +649,7 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
               </div>
               <button
                 onClick={handleSave}
-                className="cursor-pointer rounded-full bg-slate-900 px-4 py-1.5 text-sm font-semibold text-white shadow"
+                className="compose-save-button border border-slate-200 cursor-pointer rounded-full border border-slate-900 bg-slate-900 px-4 py-1.5 text-sm font-semibold text-white shadow"
                 disabled={isSaving}
               >
                 <svg
@@ -633,9 +704,9 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
               <button
                 key={network.name}
                 onClick={() => toggleNetwork(network.name)}
-                className={`rounded-full border px-3 py-1 text-sm ${
+                className={`network-pill rounded-full border px-3 py-1 text-sm ${
                   config.networks.includes(network.name)
-                    ? "border-slate-900 bg-slate-900 text-white"
+                    ? "network-pill-selected border-slate-900 bg-slate-900 text-white"
                     : "border-slate-200 text-slate-600"
                 }`}
               >
@@ -745,9 +816,12 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
           </summary>
           <div className="mt-4 space-y-4">
             {config.services.filter((service) => {
-              const info = catalog.services.find((item) => item.id === service.serviceId);
+              const info = catalog.services.find(
+                (item) => item.id === service.serviceId
+              );
               const hasProps =
-                Boolean(info?.springBoot) && Boolean(service.applicationProperties);
+                Boolean(info?.springBoot) &&
+                Boolean(service.applicationProperties);
               return service.volumes.length > 0 || hasProps;
             }).length === 0 ? (
               <p className="text-sm text-slate-500">No volumes mounted.</p>
@@ -1016,7 +1090,9 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
         <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <summary className="flex cursor-pointer list-none items-center justify-between">
             <div className="flex items-center gap-3">
-              <h2 className="text-lg font-semibold text-slate-900">Utilities</h2>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Utilities
+              </h2>
               <span className="text-xs uppercase tracking-widest text-slate-400">
                 optional
               </span>
@@ -1045,7 +1121,11 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
                     >
                       <div>
                         <p className="font-semibold">{label}</p>
-                        <p className={selected ? "text-slate-200" : "text-slate-500"}>
+                        <p
+                          className={
+                            selected ? "text-slate-200" : "text-slate-500"
+                          }
+                        >
                           {utility.file_name || "utility.bin"}
                         </p>
                       </div>

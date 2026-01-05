@@ -115,7 +115,7 @@ export default function ScriptEditorPage() {
             </button>
             <button
               onClick={handleSave}
-              className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
+              className="rounded-full border border-slate-200 bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
               disabled={isSaving}
             >
               {isSaving ? "Saving..." : "Save script"}
@@ -201,7 +201,7 @@ export default function ScriptEditorPage() {
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <label className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600">
+            <label className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600">
               Upload file
               <input
                 type="file"

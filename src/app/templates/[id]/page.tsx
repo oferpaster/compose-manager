@@ -52,7 +52,9 @@ export default function TemplateEditorPage() {
   useEffect(() => {
     async function load() {
       const response = await fetch("/api/catalog-config");
-      const data = (await response.json()) as { services: ServiceCatalogItem[] };
+      const data = (await response.json()) as {
+        services: ServiceCatalogItem[];
+      };
       const loaded = data.services || [];
       setServices(loaded);
       if (params.id === "new") {
@@ -94,7 +96,9 @@ export default function TemplateEditorPage() {
     setSaveMessage("");
 
     const nextServices = [...services];
-    const existingIndex = nextServices.findIndex((item) => item.id === service.id);
+    const existingIndex = nextServices.findIndex(
+      (item) => item.id === service.id
+    );
     if (existingIndex >= 0) {
       nextServices[existingIndex] = service;
     } else {
@@ -125,9 +129,13 @@ export default function TemplateEditorPage() {
       <div className="mx-auto w-full max-w-6xl space-y-6">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-sm uppercase tracking-widest text-slate-500">Template</p>
+            <p className="text-sm uppercase tracking-widest text-slate-500">
+              Template
+            </p>
             <h1 className="text-3xl font-semibold text-slate-900">
-              {params.id === "new" ? "New service" : service.name || "Edit service"}
+              {params.id === "new"
+                ? "New service"
+                : service.name || "Edit service"}
             </h1>
           </div>
           <div className="flex items-center gap-3">
@@ -139,7 +147,7 @@ export default function TemplateEditorPage() {
             </button>
             <button
               onClick={handleSave}
-              className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
+              className="rounded-full border border-slate-200 bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
               disabled={isSaving}
             >
               {isSaving ? "Saving..." : "Save template"}
@@ -157,7 +165,9 @@ export default function TemplateEditorPage() {
               <input
                 className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
                 value={service.id}
-                onChange={(event) => setService({ ...service, id: event.target.value })}
+                onChange={(event) =>
+                  setService({ ...service, id: event.target.value })
+                }
                 placeholder="inventory-service"
               />
             </label>
@@ -166,7 +176,9 @@ export default function TemplateEditorPage() {
               <input
                 className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
                 value={service.name}
-                onChange={(event) => setService({ ...service, name: event.target.value })}
+                onChange={(event) =>
+                  setService({ ...service, name: event.target.value })
+                }
                 placeholder="Inventory Service"
               />
             </label>
@@ -189,7 +201,9 @@ export default function TemplateEditorPage() {
               <input
                 className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
                 value={service.image}
-                onChange={(event) => setService({ ...service, image: event.target.value })}
+                onChange={(event) =>
+                  setService({ ...service, image: event.target.value })
+                }
                 placeholder="ghcr.io/example/inventory-service"
               />
             </label>
@@ -216,7 +230,10 @@ export default function TemplateEditorPage() {
                 className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
                 value={service.defaultContainerName || ""}
                 onChange={(event) =>
-                  setService({ ...service, defaultContainerName: event.target.value })
+                  setService({
+                    ...service,
+                    defaultContainerName: event.target.value,
+                  })
                 }
                 placeholder="inventory-service"
               />
@@ -275,7 +292,10 @@ export default function TemplateEditorPage() {
                 className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
                 value={service.defaultHostname || ""}
                 onChange={(event) =>
-                  setService({ ...service, defaultHostname: event.target.value })
+                  setService({
+                    ...service,
+                    defaultHostname: event.target.value,
+                  })
                 }
                 placeholder="optional"
               />
@@ -319,7 +339,10 @@ export default function TemplateEditorPage() {
                 className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
                 value={service.defaultEntrypoint || ""}
                 onChange={(event) =>
-                  setService({ ...service, defaultEntrypoint: event.target.value })
+                  setService({
+                    ...service,
+                    defaultEntrypoint: event.target.value,
+                  })
                 }
                 placeholder="/bin/app"
               />
@@ -331,7 +354,10 @@ export default function TemplateEditorPage() {
                   className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
                   value={service.propertiesTemplateFile || ""}
                   onChange={(event) =>
-                    setService({ ...service, propertiesTemplateFile: event.target.value })
+                    setService({
+                      ...service,
+                      propertiesTemplateFile: event.target.value,
+                    })
                   }
                   placeholder="data/service-templates/inventory-service/application.properties"
                 />
@@ -426,9 +452,9 @@ export default function TemplateEditorPage() {
                           : [...existing, network];
                         setService({ ...service, defaultNetworks: next });
                       }}
-                      className={`rounded-full border px-3 py-1 text-sm ${
+                      className={`network-pill rounded-full border px-3 py-1 text-sm ${
                         selected
-                          ? "border-slate-900 bg-slate-900 text-white"
+                          ? "network-pill-selected border-slate-900 bg-slate-900 text-white"
                           : "border-slate-200 text-slate-600"
                       }`}
                     >
@@ -447,7 +473,10 @@ export default function TemplateEditorPage() {
                 className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
                 value={service.defaultNetworkMode || ""}
                 onChange={(event) =>
-                  setService({ ...service, defaultNetworkMode: event.target.value })
+                  setService({
+                    ...service,
+                    defaultNetworkMode: event.target.value,
+                  })
                 }
                 placeholder="host"
               />
@@ -522,7 +551,9 @@ export default function TemplateEditorPage() {
                         defaultPrometheusMetricsPath: event.target.value,
                       })
                     }
-                    placeholder={service.springBoot ? "/actuator/metrics" : "/metrics"}
+                    placeholder={
+                      service.springBoot ? "/actuator/metrics" : "/metrics"
+                    }
                   />
                 </label>
                 <label className="text-sm text-slate-600">
@@ -564,7 +595,10 @@ export default function TemplateEditorPage() {
                 className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
                 value={service.defaultHealthcheckTest || ""}
                 onChange={(event) =>
-                  setService({ ...service, defaultHealthcheckTest: event.target.value })
+                  setService({
+                    ...service,
+                    defaultHealthcheckTest: event.target.value,
+                  })
                 }
                 placeholder="CMD-SHELL curl -f http://localhost:8080/actuator/health || exit 1"
               />
@@ -607,7 +641,8 @@ export default function TemplateEditorPage() {
                   const raw = event.target.value;
                   setService({
                     ...service,
-                    defaultHealthcheckRetries: raw === "" ? undefined : Number(raw),
+                    defaultHealthcheckRetries:
+                      raw === "" ? undefined : Number(raw),
                   });
                 }}
                 placeholder="3"

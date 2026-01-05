@@ -61,9 +61,7 @@ export default function HomePage() {
             <p className="text-sm uppercase tracking-widest text-slate-500">
               Compose Builder
             </p>
-            <h1 className="text-3xl font-semibold text-slate-900">
-              Projects
-            </h1>
+            <h1 className="text-3xl font-semibold text-slate-900">Projects</h1>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Link
@@ -108,19 +106,19 @@ export default function HomePage() {
             <button
               type="button"
               onClick={handleCreateProject}
-              className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
+              className="rounded-full border border-slate-200 bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
             >
               Create project
             </button>
           </div>
-          {error ? (
-            <p className="mt-2 text-sm text-rose-600">{error}</p>
-          ) : null}
+          {error ? <p className="mt-2 text-sm text-rose-600">{error}</p> : null}
         </section>
 
         <section className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-slate-900">All projects</h2>
+            <h2 className="text-lg font-semibold text-slate-900">
+              All projects
+            </h2>
             <input
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
@@ -140,7 +138,10 @@ export default function HomePage() {
                 key={project.id}
                 className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm"
               >
-                <Link href={`/projects/${project.id}`} className="min-w-[220px] flex-1">
+                <Link
+                  href={`/projects/${project.id}`}
+                  className="min-w-[220px] flex-1"
+                >
                   <p className="text-lg font-semibold text-slate-900">
                     {project.name}
                   </p>
@@ -158,9 +159,18 @@ export default function HomePage() {
                   <button
                     type="button"
                     onClick={() => handleDeleteProject(project.id)}
-                    className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-600"
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-700"
+                    title="Delete"
+                    aria-label="Delete"
                   >
-                    Delete
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                      className="block h-5 w-5"
+                      fill="currentColor"
+                    >
+                      <path d="M9 3h6a1 1 0 0 1 1 1v2h4a1 1 0 1 1 0 2h-1l-1 12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 8H4a1 1 0 1 1 0-2h4V4a1 1 0 0 1 1-1zm1 3h4V5h-4v1zM9 10a1 1 0 0 1 1 1v7a1 1 0 1 1-2 0v-7a1 1 0 0 1 1-1zm6 0a1 1 0 0 1 1 1v7a1 1 0 1 1-2 0v-7a1 1 0 0 1 1-1z" />
+                    </svg>
                   </button>
                 </div>
               </div>

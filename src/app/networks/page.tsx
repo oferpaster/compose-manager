@@ -66,7 +66,9 @@ export default function NetworksPage() {
   const handleDriverChange = (name: string, driver: string) => {
     setNetworks((prev) =>
       prev.map((network) =>
-        network.name === name ? { ...network, driver: driver.trim() || undefined } : network
+        network.name === name
+          ? { ...network, driver: driver.trim() || undefined }
+          : network
       )
     );
   };
@@ -76,8 +78,12 @@ export default function NetworksPage() {
       <div className="mx-auto w-full max-w-4xl space-y-6">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-sm uppercase tracking-widest text-slate-500">Networks</p>
-            <h1 className="text-3xl font-semibold text-slate-900">Default networks</h1>
+            <p className="text-sm uppercase tracking-widest text-slate-500">
+              Networks
+            </p>
+            <h1 className="text-3xl font-semibold text-slate-900">
+              Default networks
+            </h1>
           </div>
           <div className="flex items-center gap-3">
             <Link
@@ -111,7 +117,7 @@ export default function NetworksPage() {
             </label>
             <button
               onClick={handleAdd}
-              className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
+              className="rounded-full border border-slate-200 bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
               disabled={isSaving}
             >
               Add network
@@ -120,7 +126,9 @@ export default function NetworksPage() {
 
           <div className="mt-4 space-y-2">
             {networks.length === 0 ? (
-              <p className="text-sm text-slate-500">No networks configured yet.</p>
+              <p className="text-sm text-slate-500">
+                No networks configured yet.
+              </p>
             ) : (
               networks.map((network) => (
                 <div
@@ -128,7 +136,9 @@ export default function NetworksPage() {
                   className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
                 >
                   <div className="flex flex-wrap items-center gap-3">
-                    <span className="text-sm font-semibold text-slate-700">{network.name}</span>
+                    <span className="text-sm font-semibold text-slate-700">
+                      {network.name}
+                    </span>
                     <input
                       className="w-48 rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-700"
                       placeholder="driver"
