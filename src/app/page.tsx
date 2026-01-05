@@ -79,6 +79,20 @@ export default function HomePage() {
               Swagger Docs
             </Link>
             <Link
+              href="/playground"
+              className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-6 py-2 text-sm font-semibold text-slate-600"
+            >
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className="mr-2 h-4 w-4"
+                fill="currentColor"
+              >
+                <path d="M5 3h14a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-5l-4 4v-4H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm1 4a1 1 0 0 0 0 2h6a1 1 0 1 0 0-2H6zm0 4a1 1 0 0 0 0 2h10a1 1 0 1 0 0-2H6z" />
+              </svg>
+              Compose Playground
+            </Link>
+            <Link
               href="/settings"
               className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-6 py-2 text-sm font-semibold text-slate-600"
             >

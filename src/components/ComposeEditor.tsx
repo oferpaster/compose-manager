@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ComposeConfig,
+  createServiceConfig,
   generateEnvFile,
   generateComposeYaml,
   generatePrometheusYaml,
@@ -43,6 +44,7 @@ type ServiceGroup = {
 type Props = {
   initialConfig: ComposeConfig;
   onSave: (config: ComposeConfig) => Promise<void>;
+  mode?: "full" | "playground";
 };
 
 function buildGroups(services: ServiceConfig[]): ServiceGroup[] {
@@ -69,8 +71,13 @@ function buildGroups(services: ServiceConfig[]): ServiceGroup[] {
   return groups;
 }
 
-export default function ComposeEditor({ initialConfig, onSave }: Props) {
+export default function ComposeEditor({
+  initialConfig,
+  onSave,
+  mode = "full",
+}: Props) {
   const router = useRouter();
+  const isPlayground = mode === "playground";
   const [config, setConfig] = useState<ComposeConfig>(initialConfig);
   const [catalog, setCatalog] = useState<CatalogResponse>({
     services: [],
@@ -82,6 +89,7 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
     useState<ServiceCatalogItem | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<string>("");
   const [serviceCount, setServiceCount] = useState(1);
+  const [serviceQuery, setServiceQuery] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [saveStatus, setSaveStatus] = useState<"success" | "error" | "">("");
@@ -115,6 +123,10 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
   }, []);
 
   useEffect(() => {
+    if (isPlayground) {
+      setScripts([]);
+      return;
+    }
     async function loadScripts() {
       const response = await fetch("/api/scripts");
       const data = (await response.json()) as { scripts: ScriptSummary[] };
@@ -122,9 +134,13 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
     }
 
     loadScripts().catch(() => null);
-  }, []);
+  }, [isPlayground]);
 
   useEffect(() => {
+    if (isPlayground) {
+      setUtilities([]);
+      return;
+    }
     async function loadUtilities() {
       const response = await fetch("/api/utilities");
       const data = (await response.json()) as { utilities: UtilitySummary[] };
@@ -132,7 +148,7 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
     }
 
     loadUtilities().catch(() => null);
-  }, []);
+  }, [isPlayground]);
 
   const groupedServices = useMemo<ServiceGroup[]>(
     () => buildGroups(config.services),
@@ -521,6 +537,37 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
     const version = selectedVersion || selectedService.versions[0] || "latest";
     const count = Math.max(1, serviceCount || 1);
 
+    if (isPlayground) {
+      const existingNames = new Set(config.services.map((service) => service.name));
+      let index = 1;
+      const nextServices: ServiceConfig[] = [];
+      const groupId = crypto.randomUUID();
+
+      for (let i = 0; i < count; i += 1) {
+        let name = `${selectedService.id}-${index}`;
+        while (existingNames.has(name)) {
+          index += 1;
+          name = `${selectedService.id}-${index}`;
+        }
+        existingNames.add(name);
+        nextServices.push(
+          createServiceConfig(selectedService, {
+            groupId,
+            name,
+            version,
+          })
+        );
+        index += 1;
+      }
+
+      setConfig((prev) => ({ ...prev, services: [...prev.services, ...nextServices] }));
+      setSelectedService(null);
+      setSelectedVersion("");
+      setServiceCount(1);
+      setServiceQuery("");
+      return;
+    }
+
     try {
       await onSave(config);
       setSaveMessage("Saved");
@@ -585,7 +632,7 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
 
   return (
     <div className="grid h-[calc(100vh-6rem)] gap-6 overflow-hidden lg:grid-cols-[1.3fr_1fr_0.9fr]">
-      <section className="h-full overflow-y-auto pr-1 space-y-8">
+      <section className="h-full overflow-y-auto space-y-8 pr-1">
         <div className="space-y-4">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -647,21 +694,23 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
                   </div>
                 ) : null}
               </div>
-              <button
-                onClick={handleSave}
-                className="compose-save-button border border-slate-200 cursor-pointer rounded-full border border-slate-900 bg-slate-900 px-4 py-1.5 text-sm font-semibold text-white shadow"
-                disabled={isSaving}
-              >
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  className="mr-2 inline-block h-4 w-4"
-                  fill="currentColor"
+              {!isPlayground ? (
+                <button
+                  onClick={handleSave}
+                  className="compose-save-button border border-slate-200 cursor-pointer rounded-full border border-slate-900 bg-slate-900 px-4 py-1.5 text-sm font-semibold text-white shadow"
+                  disabled={isSaving}
                 >
-                  <path d="M5 3h12l4 4v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm2 2v6h10V5H7zm0 10v6h10v-6H7z" />
-                </svg>
-                {isSaving ? "Saving..." : "Save"}
-              </button>
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    className="mr-2 inline-block h-4 w-4"
+                    fill="currentColor"
+                  >
+                    <path d="M5 3h12l4 4v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm2 2v6h10V5H7zm0 10v6h10v-6H7z" />
+                  </svg>
+                  {isSaving ? "Saving..." : "Save"}
+                </button>
+              ) : null}
             </div>
           </div>
 
@@ -887,258 +936,266 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
           </div>
         </details>
 
-        <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <summary className="flex cursor-pointer list-none items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">
-                Nginx config
-              </h2>
-              <p className="text-xs uppercase tracking-widest text-slate-400">
-                optional
-              </p>
-            </div>
-            <span className="text-sm text-slate-500">Toggle</span>
-          </summary>
-          <div className="mt-4 space-y-4">
-            <div>
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-600">Certificate (.crt)</p>
-                <label className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600">
-                  Upload
-                  <input
-                    type="file"
-                    className="hidden"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) handleNginxFile("cert", file);
-                    }}
+        {!isPlayground ? (
+          <>
+            <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <summary className="flex cursor-pointer list-none items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Nginx config
+                  </h2>
+                  <p className="text-xs uppercase tracking-widest text-slate-400">
+                    optional
+                  </p>
+                </div>
+                <span className="text-sm text-slate-500">Toggle</span>
+              </summary>
+              <div className="mt-4 space-y-4">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-slate-600">Certificate (.crt)</p>
+                    <label className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600">
+                      Upload
+                      <input
+                        type="file"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) handleNginxFile("cert", file);
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <textarea
+                    className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
+                    value={config.nginx?.cert || ""}
+                    onChange={(event) =>
+                      updateNginxField("cert", event.target.value)
+                    }
+                    placeholder="-----BEGIN CERTIFICATE-----"
                   />
-                </label>
-              </div>
-              <textarea
-                className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
-                value={config.nginx?.cert || ""}
-                onChange={(event) =>
-                  updateNginxField("cert", event.target.value)
-                }
-                placeholder="-----BEGIN CERTIFICATE-----"
-              />
-            </div>
-            <div>
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-600">Private key (.key)</p>
-                <label className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600">
-                  Upload
-                  <input
-                    type="file"
-                    className="hidden"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) handleNginxFile("key", file);
-                    }}
+                </div>
+                <div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-slate-600">Private key (.key)</p>
+                    <label className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600">
+                      Upload
+                      <input
+                        type="file"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) handleNginxFile("key", file);
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <textarea
+                    className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
+                    value={config.nginx?.key || ""}
+                    onChange={(event) =>
+                      updateNginxField("key", event.target.value)
+                    }
+                    placeholder="-----BEGIN PRIVATE KEY-----"
                   />
-                </label>
-              </div>
-              <textarea
-                className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
-                value={config.nginx?.key || ""}
-                onChange={(event) =>
-                  updateNginxField("key", event.target.value)
-                }
-                placeholder="-----BEGIN PRIVATE KEY-----"
-              />
-            </div>
-            <div>
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-600">CA bundle (.ca)</p>
-                <label className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600">
-                  Upload
-                  <input
-                    type="file"
-                    className="hidden"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) handleNginxFile("ca", file);
-                    }}
+                </div>
+                <div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-slate-600">CA bundle (.ca)</p>
+                    <label className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600">
+                      Upload
+                      <input
+                        type="file"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) handleNginxFile("ca", file);
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <textarea
+                    className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
+                    value={config.nginx?.ca || ""}
+                    onChange={(event) =>
+                      updateNginxField("ca", event.target.value)
+                    }
+                    placeholder="-----BEGIN CERTIFICATE-----"
                   />
-                </label>
-              </div>
-              <textarea
-                className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
-                value={config.nginx?.ca || ""}
-                onChange={(event) => updateNginxField("ca", event.target.value)}
-                placeholder="-----BEGIN CERTIFICATE-----"
-              />
-            </div>
-            <div>
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-600">nginx.conf</p>
-                <label className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600">
-                  Upload
-                  <input
-                    type="file"
-                    className="hidden"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) handleNginxFile("config", file);
-                    }}
+                </div>
+                <div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-slate-600">nginx.conf</p>
+                    <label className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600">
+                      Upload
+                      <input
+                        type="file"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) handleNginxFile("config", file);
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <textarea
+                    className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
+                    value={config.nginx?.config || ""}
+                    onChange={(event) =>
+                      updateNginxField("config", event.target.value)
+                    }
+                    placeholder="server { ... }"
                   />
-                </label>
+                </div>
               </div>
-              <textarea
-                className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
-                value={config.nginx?.config || ""}
-                onChange={(event) =>
-                  updateNginxField("config", event.target.value)
-                }
-                placeholder="server { ... }"
-              />
-            </div>
-          </div>
-        </details>
+            </details>
 
-        <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <summary className="flex cursor-pointer list-none items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">
-                Prometheus
-              </h2>
-              <p className="text-xs uppercase tracking-widest text-slate-400">
-                optional
-              </p>
-            </div>
-            <span className="text-sm text-slate-500">Toggle</span>
-          </summary>
-          <div className="mt-4 space-y-4">
-            <label className="flex items-center gap-3 text-sm text-slate-600">
-              <input
-                type="checkbox"
-                checked={Boolean(config.prometheus?.enabled)}
-                onChange={(event) =>
-                  updatePrometheus("enabled", event.target.checked)
-                }
-              />
-              Enable Prometheus export
-            </label>
-            {config.prometheus?.enabled ? (
-              <label className="text-sm text-slate-600">
-                prometheus.yml (editable)
-                <textarea
-                  className="mt-2 min-h-[220px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
-                  value={prometheusDraft || prometheusYaml}
-                  onChange={(event) => {
-                    setPrometheusDraft(event.target.value);
-                    updatePrometheus("configYaml", event.target.value);
-                  }}
-                  onFocus={() => setPrometheusDraft(prometheusYaml)}
-                />
-              </label>
-            ) : null}
-          </div>
-        </details>
+            <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <summary className="flex cursor-pointer list-none items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Prometheus
+                  </h2>
+                  <p className="text-xs uppercase tracking-widest text-slate-400">
+                    optional
+                  </p>
+                </div>
+                <span className="text-sm text-slate-500">Toggle</span>
+              </summary>
+              <div className="mt-4 space-y-4">
+                <label className="flex items-center gap-3 text-sm text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(config.prometheus?.enabled)}
+                    onChange={(event) =>
+                      updatePrometheus("enabled", event.target.checked)
+                    }
+                  />
+                  Enable Prometheus export
+                </label>
+                {config.prometheus?.enabled ? (
+                  <label className="text-sm text-slate-600">
+                    prometheus.yml (editable)
+                    <textarea
+                      className="mt-2 min-h-[220px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
+                      value={prometheusDraft || prometheusYaml}
+                      onChange={(event) => {
+                        setPrometheusDraft(event.target.value);
+                        updatePrometheus("configYaml", event.target.value);
+                      }}
+                      onFocus={() => setPrometheusDraft(prometheusYaml)}
+                    />
+                  </label>
+                ) : null}
+              </div>
+            </details>
 
-        <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <summary className="flex cursor-pointer list-none items-center justify-between">
-            <div className="flex items-center gap-3">
-              <h2 className="text-lg font-semibold text-slate-900">Scripts</h2>
-              <span className="text-xs uppercase tracking-widest text-slate-400">
-                optional
-              </span>
-            </div>
-            <span className="text-sm text-slate-500">Toggle</span>
-          </summary>
-          <div className="mt-4 space-y-4">
-            {scripts.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                No scripts yet. Add them in Settings → Scripts.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {scripts.map((script) => {
-                  const selected = config.scriptIds?.includes(script.id);
-                  return (
-                    <button
-                      key={script.id}
-                      onClick={() => toggleScript(script.id)}
-                      className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm ${
-                        selected
-                          ? "border-slate-900 bg-slate-900 text-white"
-                          : "border-slate-200 bg-white text-slate-700"
-                      }`}
-                    >
-                      <div>
-                        <p className="font-semibold">{script.name}</p>
-                        <p
-                          className={
-                            selected ? "text-slate-200" : "text-slate-500"
-                          }
+            <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <summary className="flex cursor-pointer list-none items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Scripts
+                  </h2>
+                  <span className="text-xs uppercase tracking-widest text-slate-400">
+                    optional
+                  </span>
+                </div>
+                <span className="text-sm text-slate-500">Toggle</span>
+              </summary>
+              <div className="mt-4 space-y-4">
+                {scripts.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    No scripts yet. Add them in Settings → Scripts.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {scripts.map((script) => {
+                      const selected = config.scriptIds?.includes(script.id);
+                      return (
+                        <button
+                          key={script.id}
+                          onClick={() => toggleScript(script.id)}
+                          className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm ${
+                            selected
+                              ? "border-slate-900 bg-slate-900 text-white"
+                              : "border-slate-200 bg-white text-slate-700"
+                          }`}
                         >
-                          {script.description || "No description"}
-                        </p>
-                      </div>
-                      <span className="text-xs uppercase tracking-widest">
-                        {selected ? "Selected" : "Select"}
-                      </span>
-                    </button>
-                  );
-                })}
+                          <div>
+                            <p className="font-semibold">{script.name}</p>
+                            <p
+                              className={
+                                selected ? "text-slate-200" : "text-slate-500"
+                              }
+                            >
+                              {script.description || "No description"}
+                            </p>
+                          </div>
+                          <span className="text-xs uppercase tracking-widest">
+                            {selected ? "Selected" : "Select"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </details>
+            </details>
 
-        <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <summary className="flex cursor-pointer list-none items-center justify-between">
-            <div className="flex items-center gap-3">
-              <h2 className="text-lg font-semibold text-slate-900">
-                Utilities
-              </h2>
-              <span className="text-xs uppercase tracking-widest text-slate-400">
-                optional
-              </span>
-            </div>
-            <span className="text-sm text-slate-500">Toggle</span>
-          </summary>
-          <div className="mt-4 space-y-4">
-            {utilities.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                No utilities yet. Add them in Settings → Utilities.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {utilities.map((utility) => {
-                  const selected = config.utilityIds?.includes(utility.id);
-                  const label = utility.name || utility.file_name;
-                  return (
-                    <button
-                      key={utility.id}
-                      onClick={() => toggleUtility(utility.id)}
-                      className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm ${
-                        selected
-                          ? "border-slate-900 bg-slate-900 text-white"
-                          : "border-slate-200 bg-white text-slate-700"
-                      }`}
-                    >
-                      <div>
-                        <p className="font-semibold">{label}</p>
-                        <p
-                          className={
-                            selected ? "text-slate-200" : "text-slate-500"
-                          }
+            <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <summary className="flex cursor-pointer list-none items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Utilities
+                  </h2>
+                  <span className="text-xs uppercase tracking-widest text-slate-400">
+                    optional
+                  </span>
+                </div>
+                <span className="text-sm text-slate-500">Toggle</span>
+              </summary>
+              <div className="mt-4 space-y-4">
+                {utilities.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    No utilities yet. Add them in Settings → Utilities.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {utilities.map((utility) => {
+                      const selected = config.utilityIds?.includes(utility.id);
+                      const label = utility.name || utility.file_name;
+                      return (
+                        <button
+                          key={utility.id}
+                          onClick={() => toggleUtility(utility.id)}
+                          className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm ${
+                            selected
+                              ? "border-slate-900 bg-slate-900 text-white"
+                              : "border-slate-200 bg-white text-slate-700"
+                          }`}
                         >
-                          {utility.file_name || "utility.bin"}
-                        </p>
-                      </div>
-                      <span className="text-xs uppercase tracking-widest">
-                        {selected ? "Selected" : "Select"}
-                      </span>
-                    </button>
-                  );
-                })}
+                          <div>
+                            <p className="font-semibold">{label}</p>
+                            <p
+                              className={
+                                selected ? "text-slate-200" : "text-slate-500"
+                              }
+                            >
+                              {utility.file_name || "utility.bin"}
+                            </p>
+                          </div>
+                          <span className="text-xs uppercase tracking-widest">
+                            {selected ? "Selected" : "Select"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </details>
+            </details>
+          </>
+        ) : null}
 
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">
@@ -1149,9 +1206,11 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
               <label className="text-sm text-slate-600">Service</label>
               <input
                 list="services"
+                value={serviceQuery}
                 className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
                 placeholder="Search service..."
                 onChange={(event) => {
+                  setServiceQuery(event.target.value);
                   const matched = catalog.services.find(
                     (service) =>
                       service.name.toLowerCase() ===
@@ -1201,7 +1260,7 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
                 onClick={handleAddService}
                 className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
               >
-                Configure
+                {isPlayground ? "Add" : "Configure"}
               </button>
             </div>
           </div>
@@ -1254,16 +1313,18 @@ export default function ComposeEditor({ initialConfig, onSave }: Props) {
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() =>
-                            router.push(
-                              `/compose/${config.id}/service/${group.groupId}`
-                            )
-                          }
-                          className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-600"
-                        >
-                          Edit
-                        </button>
+                        {!isPlayground ? (
+                          <button
+                            onClick={() =>
+                              router.push(
+                                `/compose/${config.id}/service/${group.groupId}`
+                              )
+                            }
+                            className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-600"
+                          >
+                            Edit
+                          </button>
+                        ) : null}
                         <button
                           onClick={() => removeGroup(group.groupId)}
                           className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-600"
