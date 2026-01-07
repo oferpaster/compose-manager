@@ -304,6 +304,15 @@ export default function ComposeEditor({
     }
   };
 
+  const handleSortByGroup = () => {
+    setConfig((prev) => {
+      const nextServices = groupedServices.flatMap((group) =>
+        [...group.instances].sort((a, b) => a.name.localeCompare(b.name))
+      );
+      return { ...prev, services: nextServices };
+    });
+  };
+
   useEffect(() => {
     if (!hoveredGroupId) {
       setScrollTarget(null);
@@ -1359,6 +1368,12 @@ export default function ComposeEditor({
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">docker-compose.yml</h2>
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleSortByGroup}
+              className="rounded-full border border-white/20 px-2 py-1 text-xs text-white/80 hover:bg-white/10"
+            >
+              Sort by Group
+            </button>
             <button
               onClick={() => handleCopy(composeYaml, "compose")}
               className="rounded-full border border-white/20 px-2 py-1 text-xs text-white/80 hover:bg-white/10"
