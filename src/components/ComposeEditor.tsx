@@ -107,6 +107,7 @@ export default function ComposeEditor({
   const [isEditMenuOpen, setIsEditMenuOpen] = useState(false);
   const [copiedCompose, setCopiedCompose] = useState(false);
   const [copiedEnv, setCopiedEnv] = useState(false);
+  const [missingEnvValues, setMissingEnvValues] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setConfig(normalizeComposeConfig(initialConfig));
@@ -312,6 +313,36 @@ export default function ComposeEditor({
       return { ...prev, services: nextServices };
     });
   };
+
+  const addMissingEnv = (key: string) => {
+    const value = missingEnvValues[key] ?? "";
+    setConfig((prev) => {
+      if (prev.globalEnv.some((entry) => entry.key === key)) return prev;
+      return {
+        ...prev,
+        globalEnv: [...prev.globalEnv, { key, value }],
+      };
+    });
+    setMissingEnvValues((prev) => ({ ...prev, [key]: "" }));
+  };
+
+  const removeUnusedEnv = (key: string) => {
+    setConfig((prev) => ({
+      ...prev,
+      globalEnv: prev.globalEnv.filter((entry) => entry.key !== key),
+    }));
+  };
+
+  useEffect(() => {
+    if (!isValidationOpen) return;
+    setMissingEnvValues((prev) => {
+      const next: Record<string, string> = {};
+      validation.missing.forEach((key) => {
+        next[key] = prev[key] ?? "";
+      });
+      return next;
+    });
+  }, [isValidationOpen, validation.missing]);
 
   useEffect(() => {
     if (!hoveredGroupId) {
@@ -640,8 +671,8 @@ export default function ComposeEditor({
   };
 
   return (
-    <div className="grid h-[calc(100vh-6rem)] gap-6 overflow-hidden lg:grid-cols-[1.3fr_1fr_0.9fr]">
-      <section className="h-full overflow-y-auto space-y-8 pr-1">
+    <div className="grid h-[calc(100vh-6rem)] min-w-0 gap-6 overflow-hidden lg:grid-cols-[1.3fr_1fr_0.9fr]">
+      <section className="min-w-0 h-full overflow-y-auto space-y-8 pr-1">
         <div className="space-y-4">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -663,7 +694,7 @@ export default function ComposeEditor({
                 onClick={() => setIsValidationOpen(true)}
                 className="cursor-pointer rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-amber-700"
               >
-                Validate
+                Env Check
               </button>
               <div className="relative">
                 <button
@@ -1364,7 +1395,7 @@ export default function ComposeEditor({
         </section>
       </section>
 
-      <aside className="rounded-2xl border border-slate-200 bg-slate-950 p-5 text-white shadow-lg">
+      <aside className="min-w-0 rounded-2xl border border-slate-200 bg-slate-950 p-5 text-white shadow-lg">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">docker-compose.yml</h2>
           <div className="flex items-center gap-2">
@@ -1373,6 +1404,12 @@ export default function ComposeEditor({
               className="rounded-full border border-white/20 px-2 py-1 text-xs text-white/80 hover:bg-white/10"
             >
               Sort by Group
+            </button>
+            <button
+              onClick={openYamlEditor}
+              className="rounded-full border border-white/20 px-2 py-1 text-xs text-white/80 hover:bg-white/10"
+            >
+              Edit YAML
             </button>
             <button
               onClick={() => handleCopy(composeYaml, "compose")}
@@ -1407,10 +1444,16 @@ export default function ComposeEditor({
         </pre>
       </aside>
 
-      <aside className="rounded-2xl border border-slate-200 bg-slate-900 p-5 text-white shadow-lg">
+      <aside className="min-w-0 rounded-2xl border border-slate-200 bg-slate-900 p-5 text-white shadow-lg">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">.env</h2>
           <div className="flex items-center gap-2">
+            <button
+              onClick={openEnvEditor}
+              className="rounded-full border border-white/20 px-2 py-1 text-xs text-white/80 hover:bg-white/10"
+            >
+              Edit .env
+            </button>
             <button
               onClick={() => handleCopy(envFile || "", "env")}
               className="rounded-full border border-white/20 px-2 py-1 text-xs text-white/80 hover:bg-white/10"
@@ -1507,10 +1550,10 @@ export default function ComposeEditor({
 
       {isValidationOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-8">
-          <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+          <div className="flex w-full max-w-3xl max-h-[80vh] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-slate-900">
-                Validation
+                Environment Check
               </h2>
               <button
                 onClick={() => setIsValidationOpen(false)}
@@ -1519,7 +1562,7 @@ export default function ComposeEditor({
                 Close
               </button>
             </div>
-            <div className="mt-4 grid gap-6 md:grid-cols-2">
+            <div className="mt-4 flex-1 space-y-6 overflow-auto">
               <div>
                 <p className="text-sm font-semibold text-slate-700">
                   Missing envs
@@ -1527,11 +1570,33 @@ export default function ComposeEditor({
                 {validation.missing.length === 0 ? (
                   <p className="mt-2 text-sm text-slate-500">None</p>
                 ) : (
-                  <ul className="mt-2 space-y-1 text-sm text-rose-600">
+                  <div className="mt-2 space-y-2 text-sm text-rose-600">
                     {validation.missing.map((key) => (
-                      <li key={`missing-${key}`}>{key}</li>
+                      <div
+                        key={`missing-${key}`}
+                        className="grid items-center gap-2 md:grid-cols-[1fr_1fr_auto]"
+                      >
+                        <span className="font-semibold text-rose-600">{key}</span>
+                        <input
+                          value={missingEnvValues[key] ?? ""}
+                          onChange={(event) =>
+                            setMissingEnvValues((prev) => ({
+                              ...prev,
+                              [key]: event.target.value,
+                            }))
+                          }
+                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                          placeholder="value"
+                        />
+                        <button
+                          onClick={() => addMissingEnv(key)}
+                          className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"
+                        >
+                          Add
+                        </button>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 )}
               </div>
               <div>
@@ -1541,11 +1606,22 @@ export default function ComposeEditor({
                 {validation.unused.length === 0 ? (
                   <p className="mt-2 text-sm text-slate-500">None</p>
                 ) : (
-                  <ul className="mt-2 space-y-1 text-sm text-slate-600">
+                  <div className="mt-2 space-y-2 text-sm text-slate-600">
                     {validation.unused.map((key) => (
-                      <li key={`unused-${key}`}>{key}</li>
+                      <div
+                        key={`unused-${key}`}
+                        className="flex items-center justify-between gap-2"
+                      >
+                        <span className="font-semibold">{key}</span>
+                        <button
+                          onClick={() => removeUnusedEnv(key)}
+                          className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 )}
               </div>
             </div>

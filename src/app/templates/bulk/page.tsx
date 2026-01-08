@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { parse as yamlParse, stringify as yamlStringify } from "yaml";
 import { ServiceCatalogItem } from "@/lib/serviceCatalog";
 
@@ -191,6 +192,7 @@ function mergeUnique<T>(base: T[], next: T[]) {
 }
 
 export default function BulkTemplatesPage() {
+  const router = useRouter();
   const [composeText, setComposeText] = useState("");
   const [extracted, setExtracted] = useState<ExtractedService[]>([]);
   const [extractedNetworks, setExtractedNetworks] = useState<
@@ -494,6 +496,7 @@ export default function BulkTemplatesPage() {
         throw new Error("Failed to save templates");
       }
       setSaveMessage("Saved");
+      router.push("/templates");
     } catch (err) {
       setSaveMessage(err instanceof Error ? err.message : "Failed to save");
     } finally {
