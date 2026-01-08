@@ -52,6 +52,16 @@ Swagger UI is available at http://localhost:3000/docs
 Runtime data is stored in the `data/` folder (SQLite DB, templates, exports).
 This directory is ignored by git so the repo stays clean.
 
+## Linux permissions fix
+
+If you see `SQLITE_CANTOPEN` or `/app/data` is owned by root on Linux, run:
+
+```bash
+./fix-nextjs-sqlite-perms.sh ./data
+```
+
+This script ensures the bind-mounted `./data` folder is writable by the container's user.
+
 ## Notes
 
 - No user accounts; everything is global.

@@ -9,3 +9,4 @@ pnpm-debug.log*
 data
 .env*
 README.md
+fix-nextjs-sqlite-perms.sh
