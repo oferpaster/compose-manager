@@ -182,7 +182,20 @@ export async function POST(
 
   try {
     await pullDockerImages(selected.map((item) => item.image));
-    await saveDockerImagesTar(selected.map((item) => item.image), filePath);
+    const entries = selected.map((item) => {
+      const serviceName = sanitizeName(item.services[0] || "service");
+      const version = sanitizeName(item.version || "latest");
+      return {
+        image: item.image,
+        fileName: `${serviceName}_${version}.tar`,
+      };
+    });
+    await saveDockerImagesTar(entries, filePath, {
+      generatedAt: now,
+      composeId: compose.id,
+      projectId: compose.project_id,
+      images: selected,
+    });
     db.prepare(
       "UPDATE image_downloads SET status = ?, updated_at = ? WHERE id = ?"
     ).run("completed", new Date().toISOString(), downloadId);

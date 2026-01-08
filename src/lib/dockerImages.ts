@@ -1,6 +1,8 @@
 import fs from "fs";
 import http from "http";
 import path from "path";
+import os from "os";
+import archiver from "archiver";
 import { pipeline } from "stream/promises";
 
 const DOCKER_SOCKET = process.env.DOCKER_SOCKET || "/var/run/docker.sock";
@@ -76,27 +78,22 @@ export async function pullDockerImages(images: string[]) {
   }
 }
 
-export async function saveDockerImagesTar(
-  images: string[],
-  outputPath: string
-) {
-  const uniqueImages = Array.from(new Set(images)).filter(Boolean);
-  if (uniqueImages.length === 0) {
-    throw new Error("No images selected");
-  }
+type ImageTarEntry = {
+  image: string;
+  fileName: string;
+};
 
-  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-  const query = uniqueImages
-    .map((image) => `names=${encodeURIComponent(image)}`)
-    .join("&");
-  const authHeader = buildRegistryAuthHeader();
-
+async function saveSingleImageTar(image: string, outputPath: string, authHeader: string) {
   await new Promise<void>((resolve, reject) => {
     const headers: Record<string, string> = {};
     if (authHeader) {
       headers["X-Registry-Auth"] = authHeader;
     }
-    const req = createDockerRequest(`/images/get?${query}`, "GET", headers);
+    const req = createDockerRequest(
+      `/images/get?names=${encodeURIComponent(image)}`,
+      "GET",
+      headers
+    );
     req.on("response", async (res) => {
       if (res.statusCode && res.statusCode >= 300) {
         let body = "";
@@ -104,7 +101,7 @@ export async function saveDockerImagesTar(
           body += chunk.toString();
         });
         res.on("end", () => {
-          reject(new Error(body || "Failed to export docker images"));
+          reject(new Error(body || `Failed to export ${image}`));
         });
         return;
       }
@@ -118,4 +115,63 @@ export async function saveDockerImagesTar(
     req.on("error", reject);
     req.end();
   });
+}
+
+export async function saveDockerImagesTar(
+  entries: ImageTarEntry[],
+  outputPath: string,
+  metadata?: Record<string, unknown>
+) {
+  const uniqueEntries = entries
+    .filter((entry) => entry.image)
+    .reduce<ImageTarEntry[]>((acc, entry) => {
+      if (acc.some((item) => item.image === entry.image)) return acc;
+      acc.push(entry);
+      return acc;
+    }, []);
+  if (uniqueEntries.length === 0) {
+    throw new Error("No images selected");
+  }
+
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  const authHeader = buildRegistryAuthHeader();
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "composebuilder-images-"));
+  const tempFiles: { path: string; name: string }[] = [];
+
+  try {
+    for (const entry of uniqueEntries) {
+      const filePath = path.join(tempDir, entry.fileName);
+      await saveSingleImageTar(entry.image, filePath, authHeader);
+      tempFiles.push({ path: filePath, name: entry.fileName });
+    }
+
+    const archive = archiver("tar");
+    const output = fs.createWriteStream(outputPath);
+    archive.pipe(output);
+
+    tempFiles.forEach((file) => {
+      archive.file(file.path, { name: file.name });
+    });
+
+    if (metadata) {
+      archive.append(JSON.stringify(metadata, null, 2), {
+        name: "images.json",
+      });
+    }
+
+    await archive.finalize();
+    await new Promise<void>((resolve, reject) => {
+      output.on("close", () => resolve());
+      output.on("error", reject);
+    });
+  } finally {
+    tempFiles.forEach((file) => {
+      if (fs.existsSync(file.path)) {
+        fs.unlinkSync(file.path);
+      }
+    });
+    if (fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  }
 }
