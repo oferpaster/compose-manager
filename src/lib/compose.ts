@@ -115,7 +115,8 @@ export function normalizeComposeConfig(config: ComposeConfig): ComposeConfig {
   const scriptIds = Array.isArray(config.scriptIds) ? config.scriptIds : [];
   const utilityIds = Array.isArray(config.utilityIds) ? config.utilityIds : [];
   const loggingTemplate =
-    typeof config.loggingTemplate === "string" && config.loggingTemplate.trim().length > 0
+    typeof config.loggingTemplate === "string" &&
+    config.loggingTemplate.trim().length > 0
       ? config.loggingTemplate
       : DEFAULT_LOGGING_TEMPLATE;
   const nginx = {
@@ -146,7 +147,9 @@ export function normalizeComposeConfig(config: ComposeConfig): ComposeConfig {
   const services: ServiceConfig[] = [];
 
   servicesInput.forEach((service) => {
-    const { count: _count, ...rest } = service as ServiceConfig & { count?: number };
+    const { count: _count, ...rest } = service as ServiceConfig & {
+      count?: number;
+    };
     const groupId = rest.groupId || crypto.randomUUID();
     const base = rest.serviceId || "service";
     const rawCount = Number(_count);
@@ -160,16 +163,25 @@ export function normalizeComposeConfig(config: ComposeConfig): ComposeConfig {
       envFile: Array.isArray((rest as ServiceConfig).envFile)
         ? (rest as ServiceConfig).envFile
         : [],
-      capAdd: Array.isArray((rest as ServiceConfig).capAdd) ? (rest as ServiceConfig).capAdd : [],
-      logging: typeof (rest as ServiceConfig).logging === "string" ? (rest as ServiceConfig).logging : "",
+      capAdd: Array.isArray((rest as ServiceConfig).capAdd)
+        ? (rest as ServiceConfig).capAdd
+        : [],
+      logging:
+        typeof (rest as ServiceConfig).logging === "string"
+          ? (rest as ServiceConfig).logging
+          : "",
       networkMode:
         typeof (rest as ServiceConfig).networkMode === "string"
           ? (rest as ServiceConfig).networkMode
           : "",
       pid:
-        typeof (rest as ServiceConfig).pid === "string" ? (rest as ServiceConfig).pid : "",
+        typeof (rest as ServiceConfig).pid === "string"
+          ? (rest as ServiceConfig).pid
+          : "",
       user:
-        typeof (rest as ServiceConfig).user === "string" ? (rest as ServiceConfig).user : "",
+        typeof (rest as ServiceConfig).user === "string"
+          ? (rest as ServiceConfig).user
+          : "",
       containerName:
         typeof (rest as ServiceConfig).containerName === "string"
           ? (rest as ServiceConfig).containerName
@@ -257,7 +269,10 @@ export function createServiceConfig(
     ports: service.defaultPorts ? [...service.defaultPorts] : [],
     volumes: service.defaultVolumes ? [...service.defaultVolumes] : [],
     env: service.defaultEnv
-      ? Object.entries(service.defaultEnv).map(([key, value]) => ({ key, value }))
+      ? Object.entries(service.defaultEnv).map(([key, value]) => ({
+          key,
+          value,
+        }))
       : [],
     envFile: service.defaultEnvFile ? [...service.defaultEnvFile] : [],
     networks: service.defaultNetworks ? [...service.defaultNetworks] : [],
@@ -311,7 +326,10 @@ function mergeExtraYaml(target: Record<string, unknown>, extraYaml: string) {
     }
     return { merged: target, error: "Extra YAML must be a map/object." };
   } catch (error) {
-    return { merged: target, error: error instanceof Error ? error.message : "Invalid YAML" };
+    return {
+      merged: target,
+      error: error instanceof Error ? error.message : "Invalid YAML",
+    };
   }
 }
 
@@ -370,7 +388,9 @@ export function generateComposeObject(
         ? `./${serviceName}/application.properties:/opt/app/application.properties`
         : "";
 
-    const volumes = serviceConfig.volumes.length ? [...serviceConfig.volumes] : [];
+    const volumes = serviceConfig.volumes.length
+      ? [...serviceConfig.volumes]
+      : [];
     if (propertiesMount && !volumes.includes(propertiesMount)) {
       volumes.push(propertiesMount);
     }
@@ -406,7 +426,9 @@ export function generateComposeObject(
       ports: serviceConfig.ports.length ? serviceConfig.ports : undefined,
       volumes: volumes.length ? volumes : undefined,
       environment: Object.keys(environment).length ? environment : undefined,
-      env_file: serviceConfig.envFile.length ? serviceConfig.envFile : undefined,
+      env_file: serviceConfig.envFile.length
+        ? serviceConfig.envFile
+        : undefined,
       networks: serviceNetworks.length ? serviceNetworks : undefined,
       network_mode: serviceConfig.networkMode?.trim() || undefined,
       hostname: serviceConfig.hostname?.trim() || undefined,
@@ -419,7 +441,9 @@ export function generateComposeObject(
       cap_add: serviceConfig.capAdd.length ? serviceConfig.capAdd : undefined,
       logging: logging || undefined,
       healthcheck: Object.keys(healthcheck).length ? healthcheck : undefined,
-      extra_hosts: serviceConfig.extraHosts.length ? serviceConfig.extraHosts : undefined,
+      extra_hosts: serviceConfig.extraHosts.length
+        ? serviceConfig.extraHosts
+        : undefined,
       depends_on: dependsEntries.length
         ? dependsEntries.reduce<Record<string, { condition: string }>>(
             (acc, entry) => {
@@ -433,7 +457,10 @@ export function generateComposeObject(
         : undefined,
     };
 
-    const { merged, error } = mergeExtraYaml(baseService, serviceConfig.extraYaml);
+    const { merged, error } = mergeExtraYaml(
+      baseService,
+      serviceConfig.extraYaml
+    );
     if (error) {
       merged["x-extra-yaml-error"] = error;
     }
@@ -468,8 +495,15 @@ export function generateComposeYaml(
   catalog: ServiceCatalogItem[],
   networkDefinitions: NetworkDefinition[] = []
 ) {
-  const composeObject = generateComposeObject(config, catalog, networkDefinitions);
-  return yamlStringify(composeObject, { indent: 2, aliasDuplicateObjects: false });
+  const composeObject = generateComposeObject(
+    config,
+    catalog,
+    networkDefinitions
+  );
+  return yamlStringify(composeObject, {
+    indent: 2,
+    aliasDuplicateObjects: false,
+  });
 }
 
 export function generateEnvFile(config: ComposeConfig) {
@@ -525,17 +559,22 @@ function parseEnvironment(value: unknown): KeyValue[] {
     });
   }
   if (value && typeof value === "object" && !Array.isArray(value)) {
-    return Object.entries(value as Record<string, unknown>).map(([key, val]) => ({
-      key,
-      value: String(val),
-    }));
+    return Object.entries(value as Record<string, unknown>).map(
+      ([key, val]) => ({
+        key,
+        value: String(val),
+      })
+    );
   }
   return [];
 }
 
 function parseLoggingYaml(value: unknown) {
   if (!value || typeof value !== "object") return "";
-  return yamlStringify(value, { indent: 2, aliasDuplicateObjects: false }).trim();
+  return yamlStringify(value, {
+    indent: 2,
+    aliasDuplicateObjects: false,
+  }).trim();
 }
 
 function parseDependsOn(value: unknown) {
@@ -581,7 +620,10 @@ function splitImageTag(image: string) {
   return { name: image, tag: "latest" };
 }
 
-export function generatePrometheusYaml(config: ComposeConfig, catalog: ServiceCatalogItem[]) {
+export function generatePrometheusYaml(
+  config: ComposeConfig,
+  catalog: ServiceCatalogItem[]
+) {
   const escapeSingleQuotes = (value: string) => value.replace(/'/g, "''");
   const lines: string[] = [];
 
@@ -640,28 +682,35 @@ export function generatePrometheusYaml(config: ComposeConfig, catalog: ServiceCa
 
 function parseHealthcheck(value: unknown): HealthcheckConfig {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return { test: "", interval: "", timeout: "", retries: null, startPeriod: "" };
+    return {
+      test: "",
+      interval: "",
+      timeout: "",
+      retries: null,
+      startPeriod: "",
+    };
   }
   const health = value as Record<string, unknown>;
   const testValue = health.test;
   const test = Array.isArray(testValue)
     ? testValue.map((item) => String(item)).join(" ")
     : typeof testValue === "string"
-      ? testValue
-      : "";
+    ? testValue
+    : "";
   const retriesRaw = health.retries;
   const retries =
     typeof retriesRaw === "number"
       ? retriesRaw
       : typeof retriesRaw === "string" && retriesRaw.trim()
-        ? Number(retriesRaw)
-        : null;
+      ? Number(retriesRaw)
+      : null;
   return {
     test,
     interval: typeof health.interval === "string" ? health.interval : "",
     timeout: typeof health.timeout === "string" ? health.timeout : "",
     retries: Number.isFinite(retries as number) ? retries : null,
-    startPeriod: typeof health.start_period === "string" ? health.start_period : "",
+    startPeriod:
+      typeof health.start_period === "string" ? health.start_period : "",
   };
 }
 
@@ -674,7 +723,10 @@ export function parseComposeYamlToConfig(
   try {
     parsed = yamlParse(yamlText);
   } catch (error) {
-    return { config: current, error: error instanceof Error ? error.message : "Invalid YAML" };
+    return {
+      config: current,
+      error: error instanceof Error ? error.message : "Invalid YAML",
+    };
   }
 
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -683,7 +735,11 @@ export function parseComposeYamlToConfig(
 
   const root = parsed as Record<string, unknown>;
   const servicesRaw = root.services;
-  if (!servicesRaw || typeof servicesRaw !== "object" || Array.isArray(servicesRaw)) {
+  if (
+    !servicesRaw ||
+    typeof servicesRaw !== "object" ||
+    Array.isArray(servicesRaw)
+  ) {
     return { config: current, error: "Compose YAML must include services." };
   }
 
@@ -705,7 +761,8 @@ export function parseComposeYamlToConfig(
 
   Object.entries(servicesMap).forEach(([serviceName, value]) => {
     const serviceBody = value || {};
-    const image = typeof serviceBody.image === "string" ? serviceBody.image : "";
+    const image =
+      typeof serviceBody.image === "string" ? serviceBody.image : "";
     const parsedImage = splitImageTag(image);
     const imageName = parsedImage.name || "";
     const version = parsedImage.tag || "latest";
@@ -715,10 +772,15 @@ export function parseComposeYamlToConfig(
       : findServiceById(catalog, baseName);
     const serviceKey = catalogService?.id || baseName || serviceName;
     const existingGroupId = baseNameToGroupId.get(serviceKey);
-    const groupId = groupIds.get(serviceKey) || existingGroupId || crypto.randomUUID();
+    const groupId =
+      groupIds.get(serviceKey) || existingGroupId || crypto.randomUUID();
     groupIds.set(serviceKey, groupId);
     const baseConfig = catalogService
-      ? createServiceConfig(catalogService, { groupId, name: serviceName, version })
+      ? createServiceConfig(catalogService, {
+          groupId,
+          name: serviceName,
+          version,
+        })
       : ({
           id: crypto.randomUUID(),
           groupId,
@@ -773,12 +835,16 @@ export function parseComposeYamlToConfig(
       envFile,
       networks,
       networkMode:
-        typeof serviceBody.network_mode === "string" ? serviceBody.network_mode : "",
-      hostname: typeof serviceBody.hostname === "string" ? serviceBody.hostname : "",
+        typeof serviceBody.network_mode === "string"
+          ? serviceBody.network_mode
+          : "",
+      hostname:
+        typeof serviceBody.hostname === "string" ? serviceBody.hostname : "",
       pid: typeof serviceBody.pid === "string" ? serviceBody.pid : "",
       user: typeof serviceBody.user === "string" ? serviceBody.user : "",
       privileged: Boolean(serviceBody.privileged),
-      restart: typeof serviceBody.restart === "string" ? serviceBody.restart : "",
+      restart:
+        typeof serviceBody.restart === "string" ? serviceBody.restart : "",
       command: parseCommand(serviceBody.command),
       entrypoint: parseCommand(serviceBody.entrypoint),
       capAdd,
@@ -787,7 +853,9 @@ export function parseComposeYamlToConfig(
       extraHosts,
       dependsOn: depends,
       containerName:
-        typeof serviceBody.container_name === "string" ? serviceBody.container_name : "",
+        typeof serviceBody.container_name === "string"
+          ? serviceBody.container_name
+          : "",
       prometheusEnabled: previous?.prometheusEnabled || false,
       prometheusPort: previous?.prometheusPort || "",
       prometheusMetricsPath: previous?.prometheusMetricsPath || "",
