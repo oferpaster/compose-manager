@@ -102,7 +102,7 @@ export function createEmptyCompose(name: string): ComposeConfig {
       config: "",
     },
     prometheus: {
-      enabled: false,
+      enabled: true,
       configYaml: "",
     },
   };
@@ -126,7 +126,7 @@ export function normalizeComposeConfig(config: ComposeConfig): ComposeConfig {
     config: config.nginx?.config || "",
   };
   const prometheus = {
-    enabled: Boolean(config.prometheus?.enabled),
+    enabled: config.prometheus?.enabled ?? true,
     configYaml: config.prometheus?.configYaml || "",
   };
   const usedNames = new Set<string>();
@@ -658,7 +658,7 @@ export function generatePrometheusYaml(
       (serviceInfo?.springBoot ? "/actuator/metrics" : "");
     if (!metricsPath) return;
     const port = service.prometheusPort?.trim();
-    if (!port) return;
+    const targetPort = port || "SERVICE_PORT";
 
     const scrapeInterval =
       service.prometheusScrapeInterval?.trim() ||
@@ -666,7 +666,7 @@ export function generatePrometheusYaml(
 
     const safeJob = escapeSingleQuotes(service.name);
     const safeMetrics = escapeSingleQuotes(metricsPath);
-    const safeTarget = escapeSingleQuotes(`${service.name}:${port}`);
+    const safeTarget = escapeSingleQuotes(`${service.name}:${targetPort}`);
 
     lines.push(`  - job_name: '${safeJob}'`);
     lines.push(`    metrics_path: '${safeMetrics}'`);
@@ -770,6 +770,7 @@ export function parseComposeYamlToConfig(
     const catalogService = imageName
       ? findServiceByImage(catalog, imageName)
       : findServiceById(catalog, baseName);
+    const serviceInfo = catalogService;
     const serviceKey = catalogService?.id || baseName || serviceName;
     const existingGroupId = baseNameToGroupId.get(serviceKey);
     const groupId =
@@ -816,6 +817,11 @@ export function parseComposeYamlToConfig(
         } as ServiceConfig);
 
     const previous = previousByName.get(serviceName);
+    const hasPrometheusOverrides =
+      typeof previous?.prometheusEnabled === "boolean" ||
+      Boolean(previous?.prometheusPort?.trim()) ||
+      Boolean(previous?.prometheusMetricsPath?.trim()) ||
+      Boolean(previous?.prometheusScrapeInterval?.trim());
 
     const environment = parseEnvironment(serviceBody.environment);
     const ports = parseStringArray(serviceBody.ports);
@@ -826,6 +832,16 @@ export function parseComposeYamlToConfig(
     const envFile = parseStringArray(serviceBody.env_file);
     const capAdd = parseStringArray(serviceBody.cap_add);
     const healthcheck = parseHealthcheck(serviceBody.healthcheck);
+
+    const isSpringBoot =
+      Boolean(serviceInfo?.springBoot) ||
+      volumes.some((volume) => volume.includes("application.properties"));
+
+    const defaultPrometheusEnabled = baseConfig.prometheusEnabled || isSpringBoot;
+    const defaultPrometheusMetricsPath =
+      baseConfig.prometheusMetricsPath || (isSpringBoot ? "/actuator/metrics" : "");
+    const defaultPrometheusScrapeInterval =
+      baseConfig.prometheusScrapeInterval || (isSpringBoot ? "5s" : "");
 
     const nextService: ServiceConfig = {
       ...baseConfig,
@@ -856,10 +872,18 @@ export function parseComposeYamlToConfig(
         typeof serviceBody.container_name === "string"
           ? serviceBody.container_name
           : "",
-      prometheusEnabled: previous?.prometheusEnabled || false,
-      prometheusPort: previous?.prometheusPort || "",
-      prometheusMetricsPath: previous?.prometheusMetricsPath || "",
-      prometheusScrapeInterval: previous?.prometheusScrapeInterval || "",
+      prometheusEnabled: hasPrometheusOverrides
+        ? previous?.prometheusEnabled || false
+        : defaultPrometheusEnabled,
+      prometheusPort: hasPrometheusOverrides
+        ? previous?.prometheusPort || ""
+        : baseConfig.prometheusPort,
+      prometheusMetricsPath: hasPrometheusOverrides
+        ? previous?.prometheusMetricsPath || ""
+        : defaultPrometheusMetricsPath,
+      prometheusScrapeInterval: hasPrometheusOverrides
+        ? previous?.prometheusScrapeInterval || ""
+        : defaultPrometheusScrapeInterval,
     };
 
     if (previous?.applicationProperties) {

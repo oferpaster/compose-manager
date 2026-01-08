@@ -103,6 +103,8 @@ export default function ComposeEditor({
   const [yamlError, setYamlError] = useState("");
   const [serviceSearch, setServiceSearch] = useState("");
   const [prometheusDraft, setPrometheusDraft] = useState("");
+  const [prometheusDraftDirty, setPrometheusDraftDirty] = useState(false);
+  const [prometheusAuto, setPrometheusAuto] = useState(true);
   const [isValidationOpen, setIsValidationOpen] = useState(false);
   const [isEditMenuOpen, setIsEditMenuOpen] = useState(false);
   const [copiedCompose, setCopiedCompose] = useState(false);
@@ -334,6 +336,46 @@ export default function ComposeEditor({
   };
 
   useEffect(() => {
+    if (!config.prometheus?.enabled) {
+      const anyServiceEnabled = config.services.some(
+        (service) => service.prometheusEnabled
+      );
+      if (anyServiceEnabled) {
+        setConfig((prev) => ({
+          ...prev,
+          prometheus: {
+            enabled: true,
+            configYaml: prev.prometheus?.configYaml || "",
+          },
+        }));
+      }
+    }
+  }, [config.prometheus?.enabled, config.services]);
+
+  useEffect(() => {
+    if (!config.prometheus?.enabled) return;
+    if (!prometheusAuto) return;
+    if (prometheusDraftDirty) return;
+    if (config.prometheus?.configYaml?.trim()) return;
+    setPrometheusDraft(prometheusYaml);
+  }, [
+    config.prometheus?.enabled,
+    config.prometheus?.configYaml,
+    prometheusAuto,
+    prometheusDraftDirty,
+    prometheusYaml,
+  ]);
+
+  useEffect(() => {
+    if (config.prometheus?.configYaml?.trim()) {
+      setPrometheusAuto(false);
+    } else {
+      setPrometheusAuto(true);
+      setPrometheusDraftDirty(false);
+    }
+  }, [config.prometheus?.configYaml]);
+
+  useEffect(() => {
     if (!isValidationOpen) return;
     setMissingEnvValues((prev) => {
       const next: Record<string, string> = {};
@@ -467,6 +509,10 @@ export default function ComposeEditor({
     field: "enabled" | "configYaml",
     value: boolean | string
   ) => {
+    if (field === "configYaml" && typeof value === "string" && value.trim().length === 0) {
+      setPrometheusDraftDirty(false);
+      setPrometheusDraft("");
+    }
     setConfig((prev) => ({
       ...prev,
       prometheus: {
@@ -656,7 +702,7 @@ export default function ComposeEditor({
     setIsYamlEditorOpen(true);
   };
 
-  const applyYamlEditor = () => {
+  const applyYamlEditor = async () => {
     const result = parseComposeYamlToConfig(
       yamlDraft,
       config,
@@ -668,6 +714,22 @@ export default function ComposeEditor({
     }
     setConfig(result.config);
     setIsYamlEditorOpen(false);
+
+    if (isPlayground) return;
+
+    setIsSaving(true);
+    setSaveMessage("");
+    try {
+      await onSave(result.config);
+      setSaveMessage("Saved");
+      setSaveStatus("success");
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : "Failed to save");
+      setSaveStatus("error");
+    } finally {
+      setIsSaving(false);
+      setTimeout(() => setSaveMessage(""), 2500);
+    }
   };
 
   return (
@@ -1115,16 +1177,62 @@ export default function ComposeEditor({
                 </label>
                 {config.prometheus?.enabled ? (
                   <label className="text-sm text-slate-600">
-                    prometheus.yml (editable)
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span>prometheus.yml</span>
+                      <label className="flex items-center gap-2 text-[11px] uppercase tracking-widest text-slate-500">
+                        <input
+                          type="checkbox"
+                          checked={prometheusAuto}
+                          onChange={(event) => {
+                            const next = event.target.checked;
+                            setPrometheusAuto(next);
+                            if (next) {
+                              setPrometheusDraftDirty(false);
+                              setPrometheusDraft(prometheusYaml);
+                              updatePrometheus("configYaml", "");
+                            }
+                          }}
+                        />
+                        Auto-generate
+                      </label>
+                      {prometheusAuto ? (
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-emerald-700">
+                          Auto
+                        </span>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPrometheusAuto(true);
+                          setPrometheusDraftDirty(false);
+                          setPrometheusDraft(prometheusYaml);
+                          updatePrometheus("configYaml", "");
+                        }}
+                        className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-widest text-slate-500"
+                      >
+                        Regenerate
+                      </button>
+                    </div>
                     <textarea
-                      className="mt-2 min-h-[220px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
+                      className="prometheus-textarea mt-2 min-h-[220px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                       value={prometheusDraft || prometheusYaml}
                       onChange={(event) => {
                         setPrometheusDraft(event.target.value);
+                        setPrometheusDraftDirty(true);
                         updatePrometheus("configYaml", event.target.value);
                       }}
-                      onFocus={() => setPrometheusDraft(prometheusYaml)}
+                      onFocus={() => {
+                        if (!prometheusDraftDirty && !config.prometheus?.configYaml?.trim()) {
+                          setPrometheusDraft(prometheusYaml);
+                        }
+                      }}
+                      disabled={prometheusAuto}
                     />
+                    {prometheusAuto ? (
+                      <p className="mt-2 text-xs text-slate-500">
+                        Auto-generated from services marked for Prometheus. Disable auto to edit.
+                      </p>
+                    ) : null}
                   </label>
                 ) : null}
               </div>

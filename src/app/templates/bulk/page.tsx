@@ -51,6 +51,17 @@ type ComposeYaml = {
   networks?: Record<string, unknown> | string[];
 };
 
+const PROMETHEUS_DEFAULTS: Record<
+  string,
+  { port: string; metricsPath: string }
+> = {
+  loki: { port: "3100", metricsPath: "/metrics" },
+  keycloak: { port: "9000", metricsPath: "/metrics" },
+  "kafka-exporter": { port: "9308", metricsPath: "/metrics" },
+  "postgres-exporter": { port: "9187", metricsPath: "/metrics" },
+  "node-exporter": { port: "9100", metricsPath: "/metrics" },
+};
+
 function splitImageTag(image: string) {
   const lastColon = image.lastIndexOf(":");
   const lastSlash = image.lastIndexOf("/");
@@ -66,9 +77,15 @@ function parseStringArray(value: unknown): string[] {
       .map((item) => {
         if (typeof item === "string") return item;
         if (item && typeof item === "object" && !Array.isArray(item)) {
-          const entry = item as { source?: string; target?: string; read_only?: boolean };
+          const entry = item as {
+            source?: string;
+            target?: string;
+            read_only?: boolean;
+          };
           if (entry.source && entry.target) {
-            return `${entry.source}:${entry.target}${entry.read_only ? ":ro" : ""}`;
+            return `${entry.source}:${entry.target}${
+              entry.read_only ? ":ro" : ""
+            }`;
           }
           if (entry.target) return entry.target;
         }
@@ -113,20 +130,22 @@ function parseEnvironment(value: unknown): Record<string, string> {
     }, {});
   }
   if (value && typeof value === "object" && !Array.isArray(value)) {
-    return Object.entries(value as Record<string, unknown>).reduce<Record<string, string>>(
-      (acc, [key, val]) => {
-        acc[key] = String(val);
-        return acc;
-      },
-      {}
-    );
+    return Object.entries(value as Record<string, unknown>).reduce<
+      Record<string, string>
+    >((acc, [key, val]) => {
+      acc[key] = String(val);
+      return acc;
+    }, {});
   }
   return {};
 }
 
 function parseLogging(value: unknown) {
   if (!value || typeof value !== "object") return "";
-  return yamlStringify(value, { indent: 2, aliasDuplicateObjects: false }).trim();
+  return yamlStringify(value, {
+    indent: 2,
+    aliasDuplicateObjects: false,
+  }).trim();
 }
 
 function parseCommand(value: unknown) {
@@ -152,22 +171,23 @@ function parseHealthcheck(value: unknown) {
   const test = Array.isArray(testValue)
     ? testValue.map((item) => String(item)).join(" ")
     : typeof testValue === "string"
-      ? testValue
-      : "";
+    ? testValue
+    : "";
   const retriesRaw = health.retries;
   const retries =
     typeof retriesRaw === "number"
       ? retriesRaw
       : typeof retriesRaw === "string" && retriesRaw.trim()
-        ? Number(retriesRaw)
-        : undefined;
+      ? Number(retriesRaw)
+      : undefined;
 
   return {
     test,
     interval: typeof health.interval === "string" ? health.interval : "",
     timeout: typeof health.timeout === "string" ? health.timeout : "",
     retries: Number.isFinite(retries as number) ? retries : undefined,
-    startPeriod: typeof health.start_period === "string" ? health.start_period : "",
+    startPeriod:
+      typeof health.start_period === "string" ? health.start_period : "",
   };
 }
 
@@ -194,10 +214,13 @@ function mergeUnique<T>(base: T[], next: T[]) {
 export default function BulkTemplatesPage() {
   const router = useRouter();
   const [composeText, setComposeText] = useState("");
+  const [serviceSearch, setServiceSearch] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
   const [extracted, setExtracted] = useState<ExtractedService[]>([]);
   const [extractedNetworks, setExtractedNetworks] = useState<
     { name: string; driver?: string }[]
   >([]);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
   const [existingNetworks, setExistingNetworks] = useState<
     { name: string; driver?: string }[]
   >([]);
@@ -208,6 +231,16 @@ export default function BulkTemplatesPage() {
   useEffect(() => {
     setSaveMessage("");
   }, [composeText]);
+
+  useEffect(() => {
+    if (extracted.length === 0) {
+      setSelectedIndex(-1);
+      return;
+    }
+    if (selectedIndex < 0 || selectedIndex >= extracted.length) {
+      setSelectedIndex(0);
+    }
+  }, [extracted, selectedIndex]);
 
   useEffect(() => {
     async function loadNetworks() {
@@ -241,7 +274,10 @@ export default function BulkTemplatesPage() {
       return;
     }
 
-    const networksFromCompose = new Map<string, { name: string; driver?: string }>();
+    const networksFromCompose = new Map<
+      string,
+      { name: string; driver?: string }
+    >();
     if (Array.isArray(parsed.networks)) {
       parsed.networks.forEach((network) => {
         if (typeof network === "string") {
@@ -252,7 +288,7 @@ export default function BulkTemplatesPage() {
       Object.entries(parsed.networks).forEach(([name, value]) => {
         const driver =
           value && typeof value === "object" && !Array.isArray(value)
-            ? ((value as { driver?: string }).driver || "")
+            ? (value as { driver?: string }).driver || ""
             : "";
         networksFromCompose.set(name, { name, driver: driver || undefined });
       });
@@ -279,8 +315,11 @@ export default function BulkTemplatesPage() {
       });
       const capAdd = parseStringArray(service.cap_add);
       const containerName =
-        typeof service.container_name === "string" ? service.container_name : "";
-      const hostname = typeof service.hostname === "string" ? service.hostname : "";
+        typeof service.container_name === "string"
+          ? service.container_name
+          : "";
+      const hostname =
+        typeof service.hostname === "string" ? service.hostname : "";
       const pid = typeof service.pid === "string" ? service.pid : "";
       const user = typeof service.user === "string" ? service.user : "";
       const privileged = Boolean(service.privileged);
@@ -290,14 +329,44 @@ export default function BulkTemplatesPage() {
       const springBoot =
         volumes.some((vol) => vol.includes("application.properties")) ||
         hasApplicationPropertiesVolume(service.volumes);
+      const normalizedName = serviceName.replace(/-\d+$/, "").toLowerCase();
+      const normalizedContainer = containerName
+        .replace(/-\d+$/, "")
+        .toLowerCase();
+      const prometheusPreset =
+        PROMETHEUS_DEFAULTS[normalizedName] ||
+        PROMETHEUS_DEFAULTS[normalizedContainer];
 
       const existing = map.get(imageName);
       if (existing) {
         existing.versions = mergeUnique(existing.versions, [version]);
         existing.defaultPorts = mergeUnique(existing.defaultPorts || [], ports);
-        existing.defaultVolumes = mergeUnique(existing.defaultVolumes || [], volumes);
-        existing.defaultNetworks = mergeUnique(existing.defaultNetworks || [], networks);
+        existing.defaultVolumes = mergeUnique(
+          existing.defaultVolumes || [],
+          volumes
+        );
+        existing.defaultNetworks = mergeUnique(
+          existing.defaultNetworks || [],
+          networks
+        );
         existing.defaultEnv = { ...existing.defaultEnv, ...env };
+        if (springBoot && existing.defaultPrometheusEnabled !== true) {
+          existing.defaultPrometheusEnabled = true;
+          existing.defaultPrometheusMetricsPath =
+            existing.defaultPrometheusMetricsPath || "/actuator/metrics";
+          existing.defaultPrometheusScrapeInterval =
+            existing.defaultPrometheusScrapeInterval || "5s";
+        }
+        if (prometheusPreset) {
+          existing.defaultPrometheusEnabled = true;
+          existing.defaultPrometheusPort =
+            existing.defaultPrometheusPort || prometheusPreset.port;
+          existing.defaultPrometheusMetricsPath =
+            existing.defaultPrometheusMetricsPath ||
+            prometheusPreset.metricsPath;
+          existing.defaultPrometheusScrapeInterval =
+            existing.defaultPrometheusScrapeInterval || "5s";
+        }
         return;
       }
 
@@ -318,7 +387,8 @@ export default function BulkTemplatesPage() {
       base.defaultHealthcheckTimeout = healthcheck.timeout;
       base.defaultHealthcheckRetries = healthcheck.retries;
       base.defaultHealthcheckStartPeriod = healthcheck.startPeriod;
-      base.defaultRestart = typeof service.restart === "string" ? service.restart : "";
+      base.defaultRestart =
+        typeof service.restart === "string" ? service.restart : "";
       base.defaultCommand = command;
       base.defaultEntrypoint = entrypoint;
       base.defaultHostname = hostname;
@@ -331,10 +401,22 @@ export default function BulkTemplatesPage() {
       base.defaultPrometheusScrapeInterval = "";
       base.defaultContainerName = containerName;
       base.springBoot = springBoot;
+      if (springBoot) {
+        base.defaultPrometheusEnabled = true;
+        base.defaultPrometheusMetricsPath = "/actuator/metrics";
+        base.defaultPrometheusScrapeInterval = "5s";
+      }
+      if (prometheusPreset) {
+        base.defaultPrometheusEnabled = true;
+        base.defaultPrometheusPort = prometheusPreset.port;
+        base.defaultPrometheusMetricsPath = prometheusPreset.metricsPath;
+        base.defaultPrometheusScrapeInterval = "5s";
+      }
 
+      const baseServiceName = serviceName.replace(/-\d+$/, "");
       map.set(imageName, {
         ...base,
-        sourceName: serviceName,
+        sourceName: baseServiceName,
       });
     });
 
@@ -349,7 +431,9 @@ export default function BulkTemplatesPage() {
   };
 
   const updateExtracted = (index: number, next: ExtractedService) => {
-    setExtracted((prev) => prev.map((item, idx) => (idx === index ? next : item)));
+    setExtracted((prev) =>
+      prev.map((item, idx) => (idx === index ? next : item))
+    );
   };
 
   const removeExtracted = (index: number) => {
@@ -397,7 +481,9 @@ export default function BulkTemplatesPage() {
       }
 
       const response = await fetch("/api/catalog-config");
-      const data = (await response.json()) as { services: ServiceCatalogItem[] };
+      const data = (await response.json()) as {
+        services: ServiceCatalogItem[];
+      };
       const existing = data.services || [];
       const next = [...existing];
 
@@ -410,75 +496,48 @@ export default function BulkTemplatesPage() {
             current.versions || [],
             payload.versions || []
           );
-          const mergedNetworks = mergeUnique(
-            current.defaultNetworks || [],
-            payload.defaultNetworks || []
-          );
-          const mergedPorts = mergeUnique(
-            current.defaultPorts || [],
-            payload.defaultPorts || []
-          );
-          const mergedVolumes = mergeUnique(
-            current.defaultVolumes || [],
-            payload.defaultVolumes || []
-          );
-          const mergedEnvFile = mergeUnique(
-            current.defaultEnvFile || [],
-            payload.defaultEnvFile || []
-          );
-          const mergedCapAdd = mergeUnique(
-            current.defaultCapAdd || [],
-            payload.defaultCapAdd || []
-          );
-          const mergedEnv = { ...(current.defaultEnv || {}), ...(payload.defaultEnv || {}) };
           next[index] = {
             ...current,
+            id: payload.id || current.id,
+            name: payload.name || current.name,
+            description: payload.description || current.description,
             versions: mergedVersions,
-            defaultNetworks: mergedNetworks,
-            defaultPorts: mergedPorts,
-            defaultVolumes: mergedVolumes,
-            defaultEnvFile: mergedEnvFile,
-            defaultCapAdd: mergedCapAdd,
-            defaultEnv: mergedEnv,
-            defaultRestart: current.defaultRestart || payload.defaultRestart || "",
-            defaultCommand: current.defaultCommand || payload.defaultCommand || "",
-            defaultEntrypoint: current.defaultEntrypoint || payload.defaultEntrypoint || "",
-            defaultNetworkMode:
-              current.defaultNetworkMode || payload.defaultNetworkMode || "",
-            defaultLogging: current.defaultLogging || payload.defaultLogging || "",
-            defaultHealthcheckTest:
-              current.defaultHealthcheckTest || payload.defaultHealthcheckTest || "",
+            defaultNetworks: payload.defaultNetworks || [],
+            defaultPorts: payload.defaultPorts || [],
+            defaultVolumes: payload.defaultVolumes || [],
+            defaultEnvFile: payload.defaultEnvFile || [],
+            defaultCapAdd: payload.defaultCapAdd || [],
+            defaultEnv: payload.defaultEnv || {},
+            defaultRestart: payload.defaultRestart || "",
+            defaultCommand: payload.defaultCommand || "",
+            defaultEntrypoint: payload.defaultEntrypoint || "",
+            defaultNetworkMode: payload.defaultNetworkMode || "",
+            defaultLogging: payload.defaultLogging || "",
+            defaultHealthcheckTest: payload.defaultHealthcheckTest || "",
             defaultHealthcheckInterval:
-              current.defaultHealthcheckInterval || payload.defaultHealthcheckInterval || "",
-            defaultHealthcheckTimeout:
-              current.defaultHealthcheckTimeout || payload.defaultHealthcheckTimeout || "",
-            defaultHealthcheckRetries:
-              current.defaultHealthcheckRetries ?? payload.defaultHealthcheckRetries,
+              payload.defaultHealthcheckInterval || "",
+            defaultHealthcheckTimeout: payload.defaultHealthcheckTimeout || "",
+            defaultHealthcheckRetries: payload.defaultHealthcheckRetries,
             defaultHealthcheckStartPeriod:
-              current.defaultHealthcheckStartPeriod ||
-              payload.defaultHealthcheckStartPeriod ||
-              "",
+              payload.defaultHealthcheckStartPeriod || "",
             defaultPrivileged:
-              typeof current.defaultPrivileged === "boolean"
-                ? current.defaultPrivileged
-                : payload.defaultPrivileged,
-            defaultPid: current.defaultPid || payload.defaultPid || "",
-            defaultUser: current.defaultUser || payload.defaultUser || "",
-            defaultHostname: current.defaultHostname || payload.defaultHostname || "",
-            defaultPrometheusEnabled:
-              typeof current.defaultPrometheusEnabled === "boolean"
-                ? current.defaultPrometheusEnabled
-                : payload.defaultPrometheusEnabled,
-            defaultPrometheusPort:
-              current.defaultPrometheusPort || payload.defaultPrometheusPort || "",
+              typeof payload.defaultPrivileged === "boolean"
+                ? payload.defaultPrivileged
+                : current.defaultPrivileged,
+            defaultPid: payload.defaultPid || "",
+            defaultUser: payload.defaultUser || "",
+            defaultHostname: payload.defaultHostname || "",
+            defaultContainerName: payload.defaultContainerName || "",
+            springBoot:
+              typeof payload.springBoot === "boolean"
+                ? payload.springBoot
+                : current.springBoot,
+            defaultPrometheusEnabled: current.defaultPrometheusEnabled,
+            defaultPrometheusPort: current.defaultPrometheusPort || "",
             defaultPrometheusMetricsPath:
-              current.defaultPrometheusMetricsPath ||
-              payload.defaultPrometheusMetricsPath ||
-              "",
+              current.defaultPrometheusMetricsPath || "",
             defaultPrometheusScrapeInterval:
-              current.defaultPrometheusScrapeInterval ||
-              payload.defaultPrometheusScrapeInterval ||
-              "",
+              current.defaultPrometheusScrapeInterval || "",
           };
         } else {
           const id = payload.id.trim();
@@ -505,9 +564,23 @@ export default function BulkTemplatesPage() {
     }
   };
 
+  const normalizedSearch = serviceSearch.trim().toLowerCase();
+  const filteredServices = extracted.filter((service) => {
+    if (!normalizedSearch) return true;
+    const label = (service.name || service.id || service.image || "").toLowerCase();
+    return label.includes(normalizedSearch);
+  });
+  const sortedServices = [...filteredServices].sort((a, b) => {
+    const aLabel = (a.name || a.id || a.image || "").toLowerCase();
+    const bLabel = (b.name || b.id || b.image || "").toLowerCase();
+    return aLabel.localeCompare(bLabel);
+  });
+  const selectedService =
+    selectedIndex >= 0 ? extracted[selectedIndex] : null;
+
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-12">
-      <div className="mx-auto w-full max-w-6xl space-y-6">
+      <div className="mx-auto w-full max-w-7xl space-y-6">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-sm uppercase tracking-widest text-slate-500">
@@ -545,8 +618,25 @@ export default function BulkTemplatesPage() {
             />
           </label>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <label className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600">
-              Upload compose file
+            <label
+              className={`cursor-pointer rounded-full border px-4 py-2 text-sm text-slate-600 transition ${
+                isDragging
+                  ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                  : "border-slate-200 bg-white"
+              }`}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(event) => {
+                event.preventDefault();
+                setIsDragging(false);
+                const file = event.dataTransfer.files?.[0];
+                if (file) handleFileUpload(file);
+              }}
+            >
+              Upload or drop compose file
               <input
                 type="file"
                 className="hidden"
@@ -568,7 +658,9 @@ export default function BulkTemplatesPage() {
 
         {extractedNetworks.length > 0 ? (
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-900">Networks detected</h2>
+            <h2 className="text-lg font-semibold text-slate-900">
+              Networks detected
+            </h2>
             <div className="mt-3 flex flex-wrap gap-2">
               {extractedNetworks.map((network) => {
                 const existing = existingNetworks.find(
@@ -579,7 +671,9 @@ export default function BulkTemplatesPage() {
                   ? `driver: ${network.driver}`
                   : "driver: default";
                 const driverChanged =
-                  !isNew && network.driver && existing?.driver !== network.driver;
+                  !isNew &&
+                  network.driver &&
+                  existing?.driver !== network.driver;
                 return (
                   <span
                     key={network.name}
@@ -599,11 +693,14 @@ export default function BulkTemplatesPage() {
               const existing = existingNetworks.find(
                 (item) => item.name === network.name
               );
-              return !existing || (network.driver && existing.driver !== network.driver);
+              return (
+                !existing ||
+                (network.driver && existing.driver !== network.driver)
+              );
             }) ? (
               <p className="mt-3 text-sm text-emerald-700">
-                New/updated networks will be applied to the default networks list
-                when you save.
+                New/updated networks will be applied to the default networks
+                list when you save.
               </p>
             ) : null}
           </section>
@@ -611,7 +708,9 @@ export default function BulkTemplatesPage() {
 
         <section className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-900">Extracted services</h2>
+            <h2 className="text-lg font-semibold text-slate-900">
+              Extracted services
+            </h2>
           </div>
 
           {extracted.length === 0 ? (
@@ -619,391 +718,492 @@ export default function BulkTemplatesPage() {
               No services extracted yet.
             </div>
           ) : (
-            <div className="space-y-3">
-              {extracted.map((service, index) => (
-                <div
-                  key={`${service.image}-${index}`}
-                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div>
-                      <p className="text-sm text-slate-500">Image</p>
-                      <p className="text-base font-semibold text-slate-900">
-                        {service.image}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-slate-500">
-                        Versions: {service.versions.join(", ")}
-                      </span>
-                      <button
-                        onClick={() => removeExtracted(index)}
-                        className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <label className="text-sm text-slate-600">
-                      Service Name
-                      <input
-                        className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                        value={service.id}
-                        onChange={(event) =>
-                          updateExtracted(index, {
-                            ...service,
-                            id: event.target.value,
-                          })
-                        }
-                        placeholder="inventory-service"
-                      />
-                    </label>
-                    <label className="text-sm text-slate-600">
-                      Display Name
-                      <input
-                        className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                        value={service.name}
-                        onChange={(event) =>
-                          updateExtracted(index, {
-                            ...service,
-                            name: event.target.value,
-                          })
-                        }
-                        placeholder="Inventory Service"
-                      />
-                    </label>
-                    <label className="text-sm text-slate-600 md:col-span-2">
-                      Description
-                      <input
-                        className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                        value={service.description}
-                        onChange={(event) =>
-                          updateExtracted(index, {
-                            ...service,
-                            description: event.target.value,
-                          })
-                        }
-                        placeholder="Auto extracted from compose"
-                      />
-                    </label>
-                  </div>
-
-                  <div className="mt-5 grid gap-4 md:grid-cols-2">
-                    <label className="text-sm text-slate-600">
-                      Default restart policy
-                      <select
-                        className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                        value={service.defaultRestart || ""}
-                        onChange={(event) =>
-                          updateExtracted(index, {
-                            ...service,
-                            defaultRestart: event.target.value,
-                          })
-                        }
-                      >
-                        <option value="">Default</option>
-                        <option value="no">No</option>
-                        <option value="always">Always</option>
-                        <option value="on-failure">On failure</option>
-                        <option value="unless-stopped">Unless stopped</option>
-                      </select>
-                    </label>
-                    <label className="text-sm text-slate-600">
-                      Default privileged
-                      <select
-                        className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                        value={service.defaultPrivileged ? "yes" : "no"}
-                        onChange={(event) =>
-                          updateExtracted(index, {
-                            ...service,
-                            defaultPrivileged: event.target.value === "yes",
-                          })
-                        }
-                      >
-                        <option value="no">No</option>
-                        <option value="yes">Yes</option>
-                      </select>
-                    </label>
-                    <label className="text-sm text-slate-600">
-                      Default network_mode
-                      <input
-                        className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                        value={service.defaultNetworkMode || ""}
-                        onChange={(event) =>
-                          updateExtracted(index, {
-                            ...service,
-                            defaultNetworkMode: event.target.value,
-                          })
-                        }
-                        placeholder="host"
-                      />
-                    </label>
-                    <label className="text-sm text-slate-600">
-                      Default hostname
-                      <input
-                        className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                        value={service.defaultHostname || ""}
-                        onChange={(event) =>
-                          updateExtracted(index, {
-                            ...service,
-                            defaultHostname: event.target.value,
-                          })
-                        }
-                        placeholder="optional"
-                      />
-                    </label>
-                    <label className="text-sm text-slate-600">
-                      Default user
-                      <input
-                        className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                        value={service.defaultUser || ""}
-                        onChange={(event) =>
-                          updateExtracted(index, {
-                            ...service,
-                            defaultUser: event.target.value,
-                          })
-                        }
-                        placeholder="1000:1000"
-                      />
-                    </label>
-                    <label className="text-sm text-slate-600">
-                      Default PID mode
-                      <input
-                        className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                        value={service.defaultPid || ""}
-                        onChange={(event) =>
-                          updateExtracted(index, {
-                            ...service,
-                            defaultPid: event.target.value,
-                          })
-                        }
-                        placeholder="host"
-                      />
-                    </label>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 md:col-span-2">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-700">
-                            Prometheus metrics
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            Defaults for scraped metrics.
-                          </p>
-                        </div>
-                        <label className="flex items-center gap-2 text-sm text-slate-600">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(service.defaultPrometheusEnabled)}
-                            onChange={(event) =>
-                              updateExtracted(index, {
-                                ...service,
-                                defaultPrometheusEnabled: event.target.checked,
-                              })
-                            }
-                          />
-                          Enable
-                        </label>
-                      </div>
-                      {service.defaultPrometheusEnabled ? (
-                        <div className="mt-3 grid gap-4 md:grid-cols-2">
-                          <label className="text-sm text-slate-600">
-                            Default metrics port
-                            <input
-                              className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                              value={service.defaultPrometheusPort || ""}
-                              onChange={(event) =>
-                                updateExtracted(index, {
-                                  ...service,
-                                  defaultPrometheusPort: event.target.value,
-                                })
-                              }
-                              placeholder="8080"
-                            />
-                          </label>
-                          <label className="text-sm text-slate-600">
-                            Default metrics path
-                            <input
-                              className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                              value={service.defaultPrometheusMetricsPath || ""}
-                              onChange={(event) =>
-                                updateExtracted(index, {
-                                  ...service,
-                                  defaultPrometheusMetricsPath: event.target.value,
-                                })
-                              }
-                              placeholder="/metrics"
-                            />
-                          </label>
-                          <label className="text-sm text-slate-600">
-                            Default scrape interval
-                            <input
-                              className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                              value={service.defaultPrometheusScrapeInterval || ""}
-                              onChange={(event) =>
-                                updateExtracted(index, {
-                                  ...service,
-                                  defaultPrometheusScrapeInterval: event.target.value,
-                                })
-                              }
-                              placeholder="5s"
-                            />
-                          </label>
-                        </div>
-                      ) : null}
-                    </div>
-                    <label className="text-sm text-slate-600 md:col-span-2">
-                      Default command
-                      <input
-                        className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                        value={service.defaultCommand || ""}
-                        onChange={(event) =>
-                          updateExtracted(index, {
-                            ...service,
-                            defaultCommand: event.target.value,
-                          })
-                        }
-                        placeholder="./start.sh"
-                      />
-                    </label>
-                    <label className="text-sm text-slate-600 md:col-span-2">
-                      Default entrypoint
-                      <input
-                        className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                        value={service.defaultEntrypoint || ""}
-                        onChange={(event) =>
-                          updateExtracted(index, {
-                            ...service,
-                            defaultEntrypoint: event.target.value,
-                          })
-                        }
-                        placeholder="/bin/app"
-                      />
-                    </label>
-                    <label className="text-sm text-slate-600">
-                      Default ports (one per line)
-                      <textarea
-                        className="mt-2 min-h-[90px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                        value={(service.defaultPorts || []).join("\n")}
-                        onChange={(event) =>
-                          updateExtracted(index, {
-                            ...service,
-                            defaultPorts: event.target.value
-                              .split("\n")
-                              .map((item) => item.trim())
-                              .filter(Boolean),
-                          })
-                        }
-                        placeholder="8080:8080"
-                      />
-                    </label>
-                    <label className="text-sm text-slate-600">
-                      Default volumes (one per line)
-                      <textarea
-                        className="mt-2 min-h-[90px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                        value={(service.defaultVolumes || []).join("\n")}
-                        onChange={(event) =>
-                          updateExtracted(index, {
-                            ...service,
-                            defaultVolumes: event.target.value
-                              .split("\n")
-                              .map((item) => item.trim())
-                              .filter(Boolean),
-                          })
-                        }
-                        placeholder="./data:/var/lib/app"
-                      />
-                    </label>
-                    <label className="text-sm text-slate-600">
-                      Default env_file (one per line)
-                      <textarea
-                        className="mt-2 min-h-[90px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                        value={(service.defaultEnvFile || []).join("\n")}
-                        onChange={(event) =>
-                          updateExtracted(index, {
-                            ...service,
-                            defaultEnvFile: event.target.value
-                              .split("\n")
-                              .map((item) => item.trim())
-                              .filter(Boolean),
-                          })
-                        }
-                        placeholder="./app.env"
-                      />
-                    </label>
-                    <label className="text-sm text-slate-600">
-                      Default networks (one per line)
-                      <textarea
-                        className="mt-2 min-h-[90px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                        value={(service.defaultNetworks || []).join("\n")}
-                        onChange={(event) =>
-                          updateExtracted(index, {
-                            ...service,
-                            defaultNetworks: event.target.value
-                              .split("\n")
-                              .map((item) => item.trim())
-                              .filter(Boolean),
-                          })
-                        }
-                        placeholder="backend"
-                      />
-                    </label>
-                    <label className="text-sm text-slate-600">
-                      Default cap_add (one per line)
-                      <textarea
-                        className="mt-2 min-h-[90px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                        value={(service.defaultCapAdd || []).join("\n")}
-                        onChange={(event) =>
-                          updateExtracted(index, {
-                            ...service,
-                            defaultCapAdd: event.target.value
-                              .split("\n")
-                              .map((item) => item.trim())
-                              .filter(Boolean),
-                          })
-                        }
-                        placeholder="NET_ADMIN"
-                      />
-                    </label>
-                    <label className="text-sm text-slate-600 md:col-span-2">
-                      Default logging (YAML)
-                      <textarea
-                        className="mt-2 min-h-[120px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
-                        value={service.defaultLogging || ""}
-                        onChange={(event) =>
-                          updateExtracted(index, {
-                            ...service,
-                            defaultLogging: event.target.value,
-                          })
-                        }
-                        placeholder={`driver: local\noptions:\n  max-size: \"10m\"`}
-                      />
-                    </label>
-                    <label className="text-sm text-slate-600 md:col-span-2">
-                      Default environment (KEY=value per line)
-                      <textarea
-                        className="mt-2 min-h-[120px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
-                        value={Object.entries(service.defaultEnv || {})
-                          .map(([key, value]) => `${key}=${value}`)
-                          .join("\n")}
-                        onChange={(event) => {
-                          const nextEnv = event.target.value
-                            .split("\n")
-                            .map((line) => line.trim())
-                            .filter(Boolean)
-                            .reduce<Record<string, string>>((acc, line) => {
-                              const [key, ...rest] = line.split("=");
-                              acc[key] = rest.join("=");
-                              return acc;
-                            }, {});
-                          updateExtracted(index, { ...service, defaultEnv: nextEnv });
-                        }}
-                        placeholder="KEY=value"
-                      />
-                    </label>
+            <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
+              <aside className="space-y-4">
+                <input
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                  value={serviceSearch}
+                  onChange={(event) => setServiceSearch(event.target.value)}
+                  placeholder="Search by name"
+                />
+                <div className="pt-2">
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-xs uppercase tracking-widest text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3">Service</th>
+                        <th className="px-4 py-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedServices.map((service) => {
+                        const index = extracted.indexOf(service);
+                        return (
+                          <tr
+                            key={`${service.image}-${index}`}
+                            className={`border-t ${
+                              selectedIndex === index
+                                ? "bg-slate-100"
+                                : "bg-white"
+                            }`}
+                          >
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => setSelectedIndex(index)}
+                              className="w-full text-left font-semibold text-slate-900"
+                            >
+                              {service.name || service.id || service.image}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => setSelectedIndex(index)}
+                                className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-blue-200 text-blue-600 transition hover:bg-blue-50"
+                                title="Edit"
+                              >
+                                <svg
+                                  aria-hidden="true"
+                                  viewBox="0 0 24 24"
+                                  className="h-4 w-4"
+                                  fill="currentColor"
+                                >
+                                  <path d="M3 17.25V21h3.75L19.81 7.94l-3.75-3.75L3 17.25zm17.71-10.04a1.003 1.003 0 0 0 0-1.42L18.2 3.29a1.003 1.003 0 0 0-1.42 0L15 5.08l3.75 3.75 1.96-1.62z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => removeExtracted(index)}
+                                className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-rose-200 text-rose-600 transition hover:bg-rose-50"
+                                title="Remove"
+                              >
+                                <svg
+                                  aria-hidden="true"
+                                  viewBox="0 0 24 24"
+                                  className="h-4 w-4"
+                                  fill="currentColor"
+                                >
+                                  <path d="M6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7zm3-3h6a1 1 0 0 1 1 1v2H8V5a1 1 0 0 1 1-1z" />
+                                </svg>
+                              </button>
+                            </div>
+                          </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                   </div>
                 </div>
-              ))}
+              </aside>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                {selectedService ? (
+                  <div className="space-y-5">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div>
+                        <p className="text-sm text-slate-500">Image</p>
+                        <p className="text-base font-semibold text-slate-900">
+                          {selectedService.image}
+                        </p>
+                      </div>
+                      <span className="text-xs text-slate-500">
+                        Versions: {selectedService.versions.join(", ")}
+                      </span>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <label className="text-sm text-slate-600">
+                        Service Name
+                        <input
+                          className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                          value={selectedService.id}
+                          onChange={(event) =>
+                            updateExtracted(selectedIndex, {
+                              ...selectedService,
+                              id: event.target.value,
+                            })
+                          }
+                          placeholder="inventory-service"
+                        />
+                      </label>
+                      <label className="text-sm text-slate-600">
+                        Display Name
+                        <input
+                          className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                          value={selectedService.name}
+                          onChange={(event) =>
+                            updateExtracted(selectedIndex, {
+                              ...selectedService,
+                              name: event.target.value,
+                            })
+                          }
+                          placeholder="Inventory Service"
+                        />
+                      </label>
+                      <label className="text-sm text-slate-600 md:col-span-2">
+                        Description
+                        <input
+                          className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                          value={selectedService.description}
+                          onChange={(event) =>
+                            updateExtracted(selectedIndex, {
+                              ...selectedService,
+                              description: event.target.value,
+                            })
+                          }
+                          placeholder="Auto extracted from compose"
+                        />
+                      </label>
+                    </div>
+
+                    <div className="mt-5 grid gap-4 md:grid-cols-2">
+                      <label className="text-sm text-slate-600">
+                        Default restart policy
+                        <select
+                          className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                          value={selectedService.defaultRestart || ""}
+                          onChange={(event) =>
+                            updateExtracted(selectedIndex, {
+                              ...selectedService,
+                              defaultRestart: event.target.value,
+                            })
+                          }
+                        >
+                          <option value="">Default</option>
+                          <option value="no">No</option>
+                          <option value="always">Always</option>
+                          <option value="on-failure">On failure</option>
+                          <option value="unless-stopped">Unless stopped</option>
+                        </select>
+                      </label>
+                      <label className="text-sm text-slate-600">
+                        Default privileged
+                        <select
+                          className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                          value={
+                            selectedService.defaultPrivileged ? "yes" : "no"
+                          }
+                          onChange={(event) =>
+                            updateExtracted(selectedIndex, {
+                              ...selectedService,
+                              defaultPrivileged: event.target.value === "yes",
+                            })
+                          }
+                        >
+                          <option value="no">No</option>
+                          <option value="yes">Yes</option>
+                        </select>
+                      </label>
+                      <label className="text-sm text-slate-600">
+                        Default network_mode
+                        <input
+                          className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                          value={selectedService.defaultNetworkMode || ""}
+                          onChange={(event) =>
+                            updateExtracted(selectedIndex, {
+                              ...selectedService,
+                              defaultNetworkMode: event.target.value,
+                            })
+                          }
+                          placeholder="host"
+                        />
+                      </label>
+                      <label className="text-sm text-slate-600">
+                        Default hostname
+                        <input
+                          className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                          value={selectedService.defaultHostname || ""}
+                          onChange={(event) =>
+                            updateExtracted(selectedIndex, {
+                              ...selectedService,
+                              defaultHostname: event.target.value,
+                            })
+                          }
+                          placeholder="optional"
+                        />
+                      </label>
+                      <label className="text-sm text-slate-600">
+                        Default user
+                        <input
+                          className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                          value={selectedService.defaultUser || ""}
+                          onChange={(event) =>
+                            updateExtracted(selectedIndex, {
+                              ...selectedService,
+                              defaultUser: event.target.value,
+                            })
+                          }
+                          placeholder="1000:1000"
+                        />
+                      </label>
+                      <label className="text-sm text-slate-600">
+                        Default PID mode
+                        <input
+                          className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                          value={selectedService.defaultPid || ""}
+                          onChange={(event) =>
+                            updateExtracted(selectedIndex, {
+                              ...selectedService,
+                              defaultPid: event.target.value,
+                            })
+                          }
+                          placeholder="host"
+                        />
+                      </label>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 md:col-span-2">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-700">
+                              Prometheus metrics
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              Defaults for scraped metrics.
+                            </p>
+                          </div>
+                          <label className="flex items-center gap-2 text-sm text-slate-600">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(
+                                selectedService.defaultPrometheusEnabled
+                              )}
+                              onChange={(event) =>
+                                updateExtracted(selectedIndex, {
+                                  ...selectedService,
+                                  defaultPrometheusEnabled:
+                                    event.target.checked,
+                                })
+                              }
+                            />
+                            Enable
+                          </label>
+                        </div>
+                        {selectedService.defaultPrometheusEnabled ? (
+                          <div className="mt-3 grid gap-4 md:grid-cols-2">
+                            <label className="text-sm text-slate-600">
+                              Default metrics port
+                              <input
+                                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                                value={
+                                  selectedService.defaultPrometheusPort || ""
+                                }
+                                onChange={(event) =>
+                                  updateExtracted(selectedIndex, {
+                                    ...selectedService,
+                                    defaultPrometheusPort: event.target.value,
+                                  })
+                                }
+                                placeholder="8080"
+                              />
+                            </label>
+                            <label className="text-sm text-slate-600">
+                              Default metrics path
+                              <input
+                                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                                value={
+                                  selectedService.defaultPrometheusMetricsPath ||
+                                  ""
+                                }
+                                onChange={(event) =>
+                                  updateExtracted(selectedIndex, {
+                                    ...selectedService,
+                                    defaultPrometheusMetricsPath:
+                                      event.target.value,
+                                  })
+                                }
+                                placeholder="/metrics"
+                              />
+                            </label>
+                            <label className="text-sm text-slate-600">
+                              Default scrape interval
+                              <input
+                                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                                value={
+                                  selectedService.defaultPrometheusScrapeInterval ||
+                                  ""
+                                }
+                                onChange={(event) =>
+                                  updateExtracted(selectedIndex, {
+                                    ...selectedService,
+                                    defaultPrometheusScrapeInterval:
+                                      event.target.value,
+                                  })
+                                }
+                                placeholder="5s"
+                              />
+                            </label>
+                          </div>
+                        ) : null}
+                      </div>
+                      <label className="text-sm text-slate-600 md:col-span-2">
+                        Default command
+                        <input
+                          className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                          value={selectedService.defaultCommand || ""}
+                          onChange={(event) =>
+                            updateExtracted(selectedIndex, {
+                              ...selectedService,
+                              defaultCommand: event.target.value,
+                            })
+                          }
+                          placeholder="./start.sh"
+                        />
+                      </label>
+                      <label className="text-sm text-slate-600 md:col-span-2">
+                        Default entrypoint
+                        <input
+                          className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                          value={selectedService.defaultEntrypoint || ""}
+                          onChange={(event) =>
+                            updateExtracted(selectedIndex, {
+                              ...selectedService,
+                              defaultEntrypoint: event.target.value,
+                            })
+                          }
+                          placeholder="/bin/app"
+                        />
+                      </label>
+                      <label className="text-sm text-slate-600">
+                        Default ports (one per line)
+                        <textarea
+                          className="mt-2 min-h-[90px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                          value={(selectedService.defaultPorts || []).join(
+                            "\n"
+                          )}
+                          onChange={(event) =>
+                            updateExtracted(selectedIndex, {
+                              ...selectedService,
+                              defaultPorts: event.target.value
+                                .split("\n")
+                                .map((item) => item.trim())
+                                .filter(Boolean),
+                            })
+                          }
+                          placeholder="8080:8080"
+                        />
+                      </label>
+                      <label className="text-sm text-slate-600">
+                        Default volumes (one per line)
+                        <textarea
+                          className="mt-2 min-h-[90px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                          value={(selectedService.defaultVolumes || []).join(
+                            "\n"
+                          )}
+                          onChange={(event) =>
+                            updateExtracted(selectedIndex, {
+                              ...selectedService,
+                              defaultVolumes: event.target.value
+                                .split("\n")
+                                .map((item) => item.trim())
+                                .filter(Boolean),
+                            })
+                          }
+                          placeholder="./data:/var/lib/app"
+                        />
+                      </label>
+                      <label className="text-sm text-slate-600">
+                        Default env_file (one per line)
+                        <textarea
+                          className="mt-2 min-h-[90px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                          value={(selectedService.defaultEnvFile || []).join(
+                            "\n"
+                          )}
+                          onChange={(event) =>
+                            updateExtracted(selectedIndex, {
+                              ...selectedService,
+                              defaultEnvFile: event.target.value
+                                .split("\n")
+                                .map((item) => item.trim())
+                                .filter(Boolean),
+                            })
+                          }
+                          placeholder="./app.env"
+                        />
+                      </label>
+                      <label className="text-sm text-slate-600">
+                        Default networks (one per line)
+                        <textarea
+                          className="mt-2 min-h-[90px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                          value={(selectedService.defaultNetworks || []).join(
+                            "\n"
+                          )}
+                          onChange={(event) =>
+                            updateExtracted(selectedIndex, {
+                              ...selectedService,
+                              defaultNetworks: event.target.value
+                                .split("\n")
+                                .map((item) => item.trim())
+                                .filter(Boolean),
+                            })
+                          }
+                          placeholder="backend"
+                        />
+                      </label>
+                      <label className="text-sm text-slate-600">
+                        Default cap_add (one per line)
+                        <textarea
+                          className="mt-2 min-h-[90px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                          value={(selectedService.defaultCapAdd || []).join(
+                            "\n"
+                          )}
+                          onChange={(event) =>
+                            updateExtracted(selectedIndex, {
+                              ...selectedService,
+                              defaultCapAdd: event.target.value
+                                .split("\n")
+                                .map((item) => item.trim())
+                                .filter(Boolean),
+                            })
+                          }
+                          placeholder="NET_ADMIN"
+                        />
+                      </label>
+                      <label className="text-sm text-slate-600 md:col-span-2">
+                        Default logging (YAML)
+                        <textarea
+                          className="mt-2 min-h-[120px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
+                          value={selectedService.defaultLogging || ""}
+                          onChange={(event) =>
+                            updateExtracted(selectedIndex, {
+                              ...selectedService,
+                              defaultLogging: event.target.value,
+                            })
+                          }
+                          placeholder={`driver: local\noptions:\n  max-size: \"10m\"`}
+                        />
+                      </label>
+                      <label className="text-sm text-slate-600 md:col-span-2">
+                        Default environment (KEY=value per line)
+                        <textarea
+                          className="mt-2 min-h-[120px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
+                          value={Object.entries(
+                            selectedService.defaultEnv || {}
+                          )
+                            .map(([key, value]) => `${key}=${value}`)
+                            .join("\n")}
+                          onChange={(event) => {
+                            const nextEnv = event.target.value
+                              .split("\n")
+                              .map((line) => line.trim())
+                              .filter(Boolean)
+                              .reduce<Record<string, string>>((acc, line) => {
+                                const [key, ...rest] = line.split("=");
+                                acc[key] = rest.join("=");
+                                return acc;
+                              }, {});
+                            updateExtracted(selectedIndex, {
+                              ...selectedService,
+                              defaultEnv: nextEnv,
+                            });
+                          }}
+                          placeholder="KEY=value"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    Select a service to edit its defaults.
+                  </p>
+                )}
+              </div>
             </div>
           )}
           {saveMessage ? (

@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import ServiceInstanceEditor from "@/components/ServiceInstanceEditor";
-import { ComposeConfig, normalizeComposeConfig, ServiceConfig } from "@/lib/compose";
+import {
+  ComposeConfig,
+  normalizeComposeConfig,
+  ServiceConfig,
+} from "@/lib/compose";
 import { ServiceCatalogItem } from "@/lib/serviceCatalog";
 
 type CatalogResponse = {
@@ -16,10 +20,15 @@ export default function EditServiceGroupPage() {
   const router = useRouter();
   const [compose, setCompose] = useState<ComposeConfig | null>(null);
   const [instances, setInstances] = useState<ServiceConfig[]>([]);
-  const [catalog, setCatalog] = useState<CatalogResponse>({ services: [], networks: [] });
+  const [catalog, setCatalog] = useState<CatalogResponse>({
+    services: [],
+    networks: [],
+  });
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [templateCache, setTemplateCache] = useState<Record<string, string>>({});
+  const [templateCache, setTemplateCache] = useState<Record<string, string>>(
+    {}
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -99,7 +108,8 @@ export default function EditServiceGroupPage() {
     if (!instances.length) return;
     const base = instances[0];
     const existingNames = new Set(instances.map((instance) => instance.name));
-    const baseName = base.serviceId || base.name.replace(/-\d+$/, "") || "service";
+    const baseName =
+      base.serviceId || base.name.replace(/-\d+$/, "") || "service";
     let index = 1;
     let candidate = `${baseName}-${index}`;
     while (existingNames.has(candidate)) {
@@ -108,7 +118,9 @@ export default function EditServiceGroupPage() {
     }
     const nextName = candidate;
     const nextContainerName =
-      base.containerName && base.containerName === base.name ? nextName : base.containerName;
+      base.containerName && base.containerName === base.name
+        ? nextName
+        : base.containerName;
     const nextInstance: ServiceConfig = {
       ...base,
       id: crypto.randomUUID(),
@@ -126,7 +138,9 @@ export default function EditServiceGroupPage() {
 
     try {
       const groupIndices = compose.services
-        .map((service, index) => (service.groupId === params.groupId ? index : -1))
+        .map((service, index) =>
+          service.groupId === params.groupId ? index : -1
+        )
         .filter((index) => index >= 0);
 
       if (groupIndices.length === 0) {
@@ -145,7 +159,9 @@ export default function EditServiceGroupPage() {
       const serviceNames = new Set(nextServices.map((service) => service.name));
       const cleanedServices = nextServices.map((service) => ({
         ...service,
-        dependsOn: service.dependsOn.filter((entry) => serviceNames.has(entry.name)),
+        dependsOn: service.dependsOn.filter((entry) =>
+          serviceNames.has(entry.name)
+        ),
       }));
 
       const nextConfig: ComposeConfig = {
@@ -165,7 +181,9 @@ export default function EditServiceGroupPage() {
 
       router.push(`/compose/${params.id}`);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Failed to save");
+      setError(
+        saveError instanceof Error ? saveError.message : "Failed to save"
+      );
     } finally {
       setIsSaving(false);
     }
@@ -196,15 +214,21 @@ export default function EditServiceGroupPage() {
       <div className="mx-auto w-full max-w-5xl space-y-6">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-sm uppercase tracking-widest text-slate-500">Edit group</p>
-            <h1 className="text-3xl font-semibold text-slate-900">Service instances</h1>
+            <p className="text-sm uppercase tracking-widest text-slate-500">
+              Edit group
+            </p>
+            <h1 className="text-3xl font-semibold text-slate-900">
+              Service instances
+            </h1>
           </div>
           <div className="flex items-center gap-3">
             <button
               onClick={() => router.push(`/compose/${params.id}`)}
               className="rounded-full border border-slate-200 px-5 py-2 text-sm text-slate-600"
             >
-              <span className="mr-2 inline-flex h-4 w-4 items-center justify-center">←</span>
+              <span className="mr-2 inline-flex h-4 w-4 items-center justify-center">
+                ←
+              </span>
               Back
             </button>
             <button
@@ -238,7 +262,9 @@ export default function EditServiceGroupPage() {
                     <tr
                       key={instance.id}
                       className={`border-t ${
-                        selectedId === instance.id ? "bg-slate-100" : "bg-white"
+                        selectedId === instance.id
+                          ? "service-instance-selected bg-slate-200"
+                          : "bg-white"
                       }`}
                     >
                       <td className="px-4 py-3">
@@ -295,7 +321,8 @@ export default function EditServiceGroupPage() {
               <ServiceInstanceEditor
                 key={selectedId}
                 service={
-                  instances.find((instance) => instance.id === selectedId) || instances[0]
+                  instances.find((instance) => instance.id === selectedId) ||
+                  instances[0]
                 }
                 catalog={catalog.services}
                 networks={catalog.networks.map((network) => network.name)}
