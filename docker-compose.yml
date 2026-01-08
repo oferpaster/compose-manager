@@ -5,6 +5,11 @@ services:
       - "3000:3000"
     volumes:
       - ./data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       NODE_ENV: production
       PORT: 3000
+      DOCKER_SOCKET: /var/run/docker.sock
+      REGISTRY_HOST: "artifactory.example.com:6043"
+      REGISTRY_USERNAME: "your-username"
+      REGISTRY_PASSWORD: "your-password"

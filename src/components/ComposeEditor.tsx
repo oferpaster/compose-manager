@@ -101,6 +101,8 @@ export default function ComposeEditor({
   const [isYamlEditorOpen, setIsYamlEditorOpen] = useState(false);
   const [yamlDraft, setYamlDraft] = useState("");
   const [yamlError, setYamlError] = useState("");
+  const [isPortsOverviewOpen, setIsPortsOverviewOpen] = useState(false);
+  const [isVolumesOverviewOpen, setIsVolumesOverviewOpen] = useState(false);
   const [serviceSearch, setServiceSearch] = useState("");
   const [prometheusDraft, setPrometheusDraft] = useState("");
   const [prometheusDraftDirty, setPrometheusDraftDirty] = useState(false);
@@ -183,15 +185,57 @@ export default function ComposeEditor({
     return generatePrometheusYaml(config, catalog.services);
   }, [config, catalog.services]);
   const envFile = useMemo(() => generateEnvFile(config), [config]);
+  const envLookup = useMemo(() => {
+    const map = new Map<string, string>();
+    config.globalEnv.forEach((entry) => {
+      const key = entry.key.trim();
+      if (key) {
+        map.set(key, entry.value);
+      }
+    });
+    return map;
+  }, [config.globalEnv]);
+
+  const [validationConfig, setValidationConfig] =
+    useState<ComposeConfig>(config);
+
+  useEffect(() => {
+    setValidationConfig(config);
+  }, [
+    config.services,
+    config.networks,
+    config.name,
+    config.scriptIds,
+    config.utilityIds,
+    config.loggingTemplate,
+    config.nginx,
+    config.prometheus,
+  ]);
+
+  const validationComposeYaml = useMemo(
+    () =>
+      generateComposeYaml(
+        validationConfig,
+        catalog.services,
+        catalog.networks
+      ),
+    [validationConfig, catalog.services, catalog.networks]
+  );
+  const validationEnvFile = useMemo(
+    () => generateEnvFile(validationConfig),
+    [validationConfig]
+  );
 
   const validation = useMemo(() => {
     const definedGlobal = new Set<string>();
     const definedService = new Set<string>();
 
-    config.globalEnv.forEach((entry) => {
-      if (entry.key.trim()) definedGlobal.add(entry.key.trim());
+    validationConfig.globalEnv.forEach((entry) => {
+      if (entry.key.trim() && entry.value.trim()) {
+        definedGlobal.add(entry.key.trim());
+      }
     });
-    config.services.forEach((service) => {
+    validationConfig.services.forEach((service) => {
       service.env.forEach((entry) => {
         if (entry.key.trim()) definedService.add(entry.key.trim());
       });
@@ -206,9 +250,9 @@ export default function ComposeEditor({
       }
     };
 
-    extractFromText(composeYaml);
-    extractFromText(envFile);
-    config.services.forEach((service) => {
+    extractFromText(validationComposeYaml);
+    extractFromText(validationEnvFile);
+    validationConfig.services.forEach((service) => {
       if (service.applicationProperties) {
         extractFromText(service.applicationProperties);
       }
@@ -225,7 +269,29 @@ export default function ComposeEditor({
     unused.sort();
 
     return { missing, unused };
-  }, [composeYaml, config, envFile]);
+  }, [validationComposeYaml, validationConfig, validationEnvFile]);
+
+  const resolvePortMapping = (port: string, envMap: Map<string, string>) => {
+    const pattern = /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::([^}]*))?\}/g;
+    let missing = false;
+    let replaced = false;
+    const resolved = port.replace(pattern, (match, name, fallback) => {
+      replaced = true;
+      if (envMap.has(name)) {
+        return envMap.get(name) ?? "";
+      }
+      if (typeof fallback === "string") {
+        return fallback;
+      }
+      missing = true;
+      return match;
+    });
+
+    if (!replaced || missing || resolved.includes("${") || resolved === port) {
+      return port;
+    }
+    return `${port} - ${resolved}`;
+  };
 
   const highlightLines = useMemo(() => {
     if (!hoveredGroupId) return new Set<number>();
@@ -467,10 +533,14 @@ export default function ComposeEditor({
   }, [scrollTarget]);
 
   const addGlobalEnv = () => {
-    setConfig((prev) => ({
-      ...prev,
-      globalEnv: [...prev.globalEnv, emptyKeyValue()],
-    }));
+    setConfig((prev) => {
+      const next = {
+        ...prev,
+        globalEnv: [...prev.globalEnv, emptyKeyValue()],
+      };
+      setValidationConfig(next);
+      return next;
+    });
   };
 
   const updateGlobalEnv = (index: number, next: KeyValue) => {
@@ -483,10 +553,14 @@ export default function ComposeEditor({
   };
 
   const removeGlobalEnv = (index: number) => {
-    setConfig((prev) => ({
-      ...prev,
-      globalEnv: prev.globalEnv.filter((_, idx) => idx !== index),
-    }));
+    setConfig((prev) => {
+      const next = {
+        ...prev,
+        globalEnv: prev.globalEnv.filter((_, idx) => idx !== index),
+      };
+      setValidationConfig(next);
+      return next;
+    });
   };
 
   const updateNginxField = (
@@ -693,6 +767,10 @@ export default function ComposeEditor({
 
   const applyEnvEditor = () => {
     setConfig((prev) => ({ ...prev, globalEnv: parseEnvText(envDraft) }));
+    setValidationConfig((prev) => ({
+      ...prev,
+      globalEnv: parseEnvText(envDraft),
+    }));
     setIsEnvEditorOpen(false);
   };
 
@@ -885,6 +963,7 @@ export default function ComposeEditor({
                       key: event.target.value,
                     })
                   }
+                  onBlur={() => setValidationConfig(config)}
                   className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
                   placeholder="KEY"
                 />
@@ -896,6 +975,7 @@ export default function ComposeEditor({
                       value: event.target.value,
                     })
                   }
+                  onBlur={() => setValidationConfig(config)}
                   className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
                   placeholder="value"
                 />
@@ -921,7 +1001,27 @@ export default function ComposeEditor({
             <h2 className="text-lg font-semibold text-slate-900">
               Ports Overview
             </h2>
-            <span className="text-sm text-slate-500">Toggle</span>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  setIsPortsOverviewOpen(true);
+                }}
+                className="rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600"
+                title="Open"
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4"
+                  fill="currentColor"
+                >
+                  <path d="M7 3H3v4a1 1 0 1 0 2 0V6h2a1 1 0 1 0 0-2zm14 0h-4a1 1 0 1 0 0 2h2v2a1 1 0 1 0 2 0V3zM5 17a1 1 0 0 0-2 0v4h4a1 1 0 1 0 0-2H5v-2zm14 0v2h-2a1 1 0 1 0 0 2h4v-4a1 1 0 0 0-2 0z" />
+                </svg>
+              </button>
+              <span className="text-sm text-slate-500">Toggle</span>
+            </div>
           </summary>
           <div className="mt-4 space-y-4">
             {config.services.filter((service) => service.ports.length > 0)
@@ -947,7 +1047,19 @@ export default function ComposeEditor({
                             {service.name}
                           </td>
                           <td className="px-4 py-3 text-slate-600">
-                            {service.ports.join(", ")}
+                            <div className="space-y-1">
+                              {service.ports.map((port, index) => {
+                                const resolved = resolvePortMapping(
+                                  port,
+                                  envLookup
+                                );
+                                return (
+                                  <div key={`${service.id}-port-${index}`}>
+                                    {resolved}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -963,7 +1075,27 @@ export default function ComposeEditor({
             <h2 className="text-lg font-semibold text-slate-900">
               Volumes Overview
             </h2>
-            <span className="text-sm text-slate-500">Toggle</span>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  setIsVolumesOverviewOpen(true);
+                }}
+                className="rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600"
+                title="Open"
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4"
+                  fill="currentColor"
+                >
+                  <path d="M7 3H3v4a1 1 0 1 0 2 0V6h2a1 1 0 1 0 0-2zm14 0h-4a1 1 0 1 0 0 2h2v2a1 1 0 1 0 2 0V3zM5 17a1 1 0 0 0-2 0v4h4a1 1 0 1 0 0-2H5v-2zm14 0v2h-2a1 1 0 1 0 0 2h4v-4a1 1 0 0 0-2 0z" />
+                </svg>
+              </button>
+              <span className="text-sm text-slate-500">Toggle</span>
+            </div>
           </summary>
           <div className="mt-4 space-y-4">
             {config.services.filter((service) => {
@@ -1003,7 +1135,13 @@ export default function ComposeEditor({
                             {service.name}
                           </td>
                           <td className="px-4 py-3 text-slate-600">
-                            {volumes.join(", ")}
+                            <div className="space-y-1">
+                              {volumes.map((volume, index) => (
+                                <div key={`${service.id}-volume-${index}`}>
+                                  {volume}
+                                </div>
+                              ))}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1616,6 +1754,83 @@ export default function ComposeEditor({
         </div>
       ) : null}
 
+      {isVolumesOverviewOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-8">
+          <div className="flex max-h-[85vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Volumes Overview
+                </h2>
+                <p className="text-sm text-slate-500">
+                  {config.name || "Compose"}
+                </p>
+              </div>
+              <button
+                onClick={() => setIsVolumesOverviewOpen(false)}
+                className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600"
+              >
+                Close
+              </button>
+            </div>
+            <div className="mt-4 flex-1 overflow-auto">
+              {config.services.filter((service) => {
+                const info = catalog.services.find(
+                  (item) => item.id === service.serviceId
+                );
+                const hasProps =
+                  Boolean(info?.springBoot) &&
+                  Boolean(service.applicationProperties);
+                return service.volumes.length > 0 || hasProps;
+              }).length === 0 ? (
+                <p className="text-sm text-slate-500">No volumes mounted.</p>
+              ) : (
+                <div className="overflow-hidden rounded-xl border border-slate-200">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-xs uppercase tracking-widest text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3">Service</th>
+                        <th className="px-4 py-3">Volumes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {config.services.map((service) => {
+                        const info = catalog.services.find(
+                          (item) => item.id === service.serviceId
+                        );
+                        const volumes = [...service.volumes];
+                        if (info?.springBoot && service.applicationProperties) {
+                          volumes.push(
+                            `./${service.name}/application.properties:/opt/app/application.properties`
+                          );
+                        }
+                        if (volumes.length === 0) return null;
+                        return (
+                          <tr key={`volumes-modal-${service.id}`} className="border-t">
+                            <td className="px-4 py-3 font-semibold text-slate-900">
+                              {service.name}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">
+                              <div className="space-y-1">
+                                {volumes.map((volume, index) => (
+                                  <div key={`${service.id}-modal-volume-${index}`}>
+                                    {volume}
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {isYamlEditorOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-8">
           <div className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
@@ -1651,6 +1866,74 @@ export default function ComposeEditor({
               >
                 Apply
               </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isPortsOverviewOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-8">
+          <div className="flex max-h-[85vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Ports Overview
+                </h2>
+                <p className="text-sm text-slate-500">
+                  {config.name || "Compose"}
+                </p>
+              </div>
+              <button
+                onClick={() => setIsPortsOverviewOpen(false)}
+                className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600"
+              >
+                Close
+              </button>
+            </div>
+            <div className="mt-4 flex-1 overflow-auto">
+              {config.services.filter((service) => service.ports.length > 0)
+                .length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  No port mappings defined.
+                </p>
+              ) : (
+                <div className="overflow-hidden rounded-xl border border-slate-200">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-xs uppercase tracking-widest text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3">Service</th>
+                        <th className="px-4 py-3">Ports</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {config.services
+                        .filter((service) => service.ports.length > 0)
+                        .map((service) => (
+                          <tr key={`ports-modal-${service.id}`} className="border-t">
+                            <td className="px-4 py-3 font-semibold text-slate-900">
+                              {service.name}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">
+                              <div className="space-y-1">
+                                {service.ports.map((port, index) => {
+                                  const resolved = resolvePortMapping(
+                                    port,
+                                    envLookup
+                                  );
+                                  return (
+                                    <div key={`${service.id}-modal-port-${index}`}>
+                                      {resolved}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </div>

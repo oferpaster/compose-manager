@@ -6,13 +6,14 @@ const openApiSpec = {
     title: "ComposeBuilder API",
     version: "1.0.0",
     description:
-      "API for managing projects, compose versions, templates, scripts, utilities, exports, and snapshots.",
+      "API for managing projects, compose versions, templates, scripts, utilities, exports, snapshots, and image downloads.",
   },
   servers: [{ url: "/" }],
   tags: [
     { name: "Projects" },
     { name: "Composes" },
     { name: "Snapshots" },
+    { name: "Images" },
     { name: "Templates" },
     { name: "Networks" },
     { name: "Scripts" },
@@ -70,6 +71,7 @@ const openApiSpec = {
               },
             },
           },
+          extraYaml: { type: "string" },
           healthcheck: {
             type: "object",
             properties: {
@@ -115,7 +117,6 @@ const openApiSpec = {
             },
           },
           loggingTemplate: { type: "string" },
-          loggingError: { type: "string" },
         },
       },
       ExportOptions: {
@@ -125,6 +126,26 @@ const openApiSpec = {
           includeConfigs: { type: "boolean" },
           includeScripts: { type: "boolean" },
           includeUtilities: { type: "boolean" },
+          imageDownloadIds: { type: "array", items: { type: "string" } },
+        },
+      },
+      ImageOption: {
+        type: "object",
+        properties: {
+          image: { type: "string" },
+          version: { type: "string" },
+          services: { type: "array", items: { type: "string" } },
+        },
+      },
+      ImageDownload: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          fileName: { type: "string" },
+          status: { type: "string" },
+          errorMessage: { type: "string" },
+          createdAt: { type: "string" },
+          images: { type: "array", items: { $ref: "#/components/schemas/ImageOption" } },
         },
       },
       Project: {
@@ -133,6 +154,12 @@ const openApiSpec = {
           id: { type: "string" },
           name: { type: "string" },
           updated_at: { type: "string" },
+        },
+      },
+      ProjectCapabilities: {
+        type: "object",
+        properties: {
+          imageDownloads: { type: "boolean" },
         },
       },
       ComposeRow: {
@@ -172,6 +199,8 @@ const openApiSpec = {
           id: { type: "string" },
           name: { type: "string" },
           file_name: { type: "string" },
+          file_path: { type: "string" },
+          created_at: { type: "string" },
           updated_at: { type: "string" },
         },
       },
@@ -186,8 +215,31 @@ const openApiSpec = {
           defaultPorts: { type: "array", items: { type: "string" } },
           defaultVolumes: { type: "array", items: { type: "string" } },
           defaultEnv: { type: "object", additionalProperties: { type: "string" } },
+          defaultEnvFile: { type: "array", items: { type: "string" } },
+          defaultContainerName: { type: "string" },
           defaultNetworks: { type: "array", items: { type: "string" } },
+          defaultRestart: { type: "string" },
+          defaultPrivileged: { type: "boolean" },
+          defaultPid: { type: "string" },
+          defaultUser: { type: "string" },
+          defaultHostname: { type: "string" },
+          defaultCommand: { type: "string" },
+          defaultEntrypoint: { type: "string" },
+          defaultNetworkMode: { type: "string" },
+          defaultCapAdd: { type: "array", items: { type: "string" } },
+          defaultLogging: { type: "string" },
+          defaultPrometheusEnabled: { type: "boolean" },
+          defaultPrometheusPort: { type: "string" },
+          defaultPrometheusMetricsPath: { type: "string" },
+          defaultPrometheusScrapeInterval: { type: "string" },
+          defaultHealthcheckTest: { type: "string" },
+          defaultHealthcheckInterval: { type: "string" },
+          defaultHealthcheckTimeout: { type: "string" },
+          defaultHealthcheckRetries: { type: "integer" },
+          defaultHealthcheckStartPeriod: { type: "string" },
           springBoot: { type: "boolean" },
+          propertiesTemplateFile: { type: "string" },
+          applicationPropertiesTemplate: { type: "string" },
         },
       },
     },
@@ -266,6 +318,9 @@ const openApiSpec = {
                     composes: {
                       type: "array",
                       items: { $ref: "#/components/schemas/ComposeRow" },
+                    },
+                    capabilities: {
+                      $ref: "#/components/schemas/ProjectCapabilities",
                     },
                   },
                 },
@@ -521,6 +576,100 @@ const openApiSpec = {
         responses: { "200": { description: "Deleted" } },
       },
     },
+    "/api/composes/{id}/images": {
+      get: {
+        tags: ["Images"],
+        summary: "List available images and download requests",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          "200": {
+            description: "Images and downloads",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    enabled: { type: "boolean" },
+                    images: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/ImageOption" },
+                    },
+                    downloads: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/ImageDownload" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      post: {
+        tags: ["Images"],
+        summary: "Download selected images into a tar archive",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: { images: { type: "array", items: { type: "string" } } },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Download created",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    download: { $ref: "#/components/schemas/ImageDownload" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/composes/{id}/images/{downloadId}": {
+      get: {
+        tags: ["Images"],
+        summary: "Download image archive",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+          { name: "downloadId", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          "200": {
+            description: "Tar archive",
+            content: {
+              "application/x-tar": {
+                schema: { type: "string", format: "binary" },
+              },
+            },
+          },
+        },
+      },
+      delete: {
+        tags: ["Images"],
+        summary: "Delete image download",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+          { name: "downloadId", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: { "200": { description: "Deleted" } },
+      },
+    },
     "/api/templates/{serviceId}": {
       get: {
         tags: ["Templates"],
@@ -711,7 +860,19 @@ const openApiSpec = {
         parameters: [
           { name: "id", in: "path", required: true, schema: { type: "string" } },
         ],
-        responses: { "200": { description: "Script" } },
+        responses: {
+          "200": {
+            description: "Script",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: { script: { $ref: "#/components/schemas/Script" } },
+                },
+              },
+            },
+          },
+        },
       },
       put: {
         tags: ["Scripts"],
@@ -798,7 +959,19 @@ const openApiSpec = {
         parameters: [
           { name: "id", in: "path", required: true, schema: { type: "string" } },
         ],
-        responses: { "200": { description: "Utility" } },
+        responses: {
+          "200": {
+            description: "Utility",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: { utility: { $ref: "#/components/schemas/Utility" } },
+                },
+              },
+            },
+          },
+        },
       },
       put: {
         tags: ["Utilities"],

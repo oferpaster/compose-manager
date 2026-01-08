@@ -76,6 +76,7 @@ export async function POST(
     includeConfigs: body.options?.includeConfigs !== false,
     includeScripts: body.options?.includeScripts !== false,
     includeUtilities: body.options?.includeUtilities !== false,
+    imageDownloadIds: [],
   };
   ensureSnapshotDir();
   const snapshotId = crypto.randomUUID();

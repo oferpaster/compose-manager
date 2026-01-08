@@ -65,6 +65,9 @@ export async function POST(
     includeConfigs: body.includeConfigs !== false,
     includeScripts: body.includeScripts !== false,
     includeUtilities: body.includeUtilities !== false,
+    imageDownloadIds: Array.isArray(body.imageDownloadIds)
+      ? body.imageDownloadIds
+      : [],
   };
 
   const config = JSON.parse(row.config_json) as ComposeConfig;

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { isDockerImageDownloadEnabled } from "@/lib/dockerImages";
 
 export async function GET(
   _request: Request,
@@ -18,7 +19,11 @@ export async function GET(
     )
     .all(id);
 
-  return NextResponse.json({ project, composes });
+  return NextResponse.json({
+    project,
+    composes,
+    capabilities: { imageDownloads: isDockerImageDownloadEnabled() },
+  });
 }
 
 export async function DELETE(

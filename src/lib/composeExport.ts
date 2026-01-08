@@ -30,6 +30,7 @@ export type ExportOptions = {
   includeConfigs: boolean;
   includeScripts: boolean;
   includeUtilities: boolean;
+  imageDownloadIds?: string[];
 };
 
 export async function buildComposeZipBufferWithOptions(
@@ -127,6 +128,28 @@ async function appendComposeEntries(
         }
       });
     }
+  }
+
+  const imageDownloadIds = Array.isArray(options.imageDownloadIds)
+    ? options.imageDownloadIds
+    : [];
+  if (imageDownloadIds.length > 0) {
+    const placeholders = imageDownloadIds.map(() => "?").join(",");
+    const downloads = db
+      .prepare(
+        `SELECT id, file_name, file_path FROM image_downloads WHERE compose_id = ? AND id IN (${placeholders})`
+      )
+      .all(composeId, ...imageDownloadIds) as {
+      id: string;
+      file_name: string;
+      file_path: string;
+    }[];
+    downloads.forEach((download) => {
+      const fileName = download.file_name || "images.tar";
+      if (download.file_path && fs.existsSync(download.file_path)) {
+        archive.file(download.file_path, { name: `images/${fileName}` });
+      }
+    });
   }
 
   if (options.includeConfigs) {

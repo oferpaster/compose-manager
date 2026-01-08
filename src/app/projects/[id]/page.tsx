@@ -18,9 +18,25 @@ type SnapshotRow = {
   created_at: string;
 };
 
+type ImageOption = {
+  image: string;
+  version: string;
+  services: string[];
+};
+
+type ImageDownloadRow = {
+  id: string;
+  fileName: string;
+  status: string;
+  createdAt: string;
+  errorMessage?: string;
+  images: ImageOption[];
+};
+
 type ProjectResponse = {
   project: { id: string; name: string };
   composes: ComposeRow[];
+  capabilities?: { imageDownloads?: boolean };
 };
 
 export default function ProjectDetailPage() {
@@ -30,6 +46,9 @@ export default function ProjectDetailPage() {
     null
   );
   const [composes, setComposes] = useState<ComposeRow[]>([]);
+  const [capabilities, setCapabilities] = useState<
+    ProjectResponse["capabilities"] | null
+  >(null);
   const [error, setError] = useState("");
   const [isDuplicateOpen, setIsDuplicateOpen] = useState(false);
   const [duplicateName, setDuplicateName] = useState("");
@@ -53,11 +72,49 @@ export default function ProjectDetailPage() {
     includeScripts: true,
     includeUtilities: true,
   });
+  const [exportImageDownloads, setExportImageDownloads] = useState<
+    ImageDownloadRow[]
+  >([]);
+  const [exportImageSelections, setExportImageSelections] = useState<
+    Record<string, boolean>
+  >({});
+  const [exportImagesLoading, setExportImagesLoading] = useState(false);
+  const [exportImagesError, setExportImagesError] = useState("");
+  const [exportImageDetailsOpen, setExportImageDetailsOpen] = useState<
+    Record<string, boolean>
+  >({});
   const [snapshotOptions, setSnapshotOptions] = useState({
     includeCompose: true,
     includeConfigs: true,
     includeScripts: true,
     includeUtilities: true,
+  });
+  const [imagesOpen, setImagesOpen] = useState(false);
+  const [imageTarget, setImageTarget] = useState<ComposeRow | null>(null);
+  const [imageOptions, setImageOptions] = useState<ImageOption[]>([]);
+  const [imageDownloads, setImageDownloads] = useState<ImageDownloadRow[]>([]);
+  const [imageSelections, setImageSelections] = useState<Record<string, boolean>>(
+    {}
+  );
+  const [imagesLoading, setImagesLoading] = useState(false);
+  const [imagesError, setImagesError] = useState("");
+  const [imagesDownloading, setImagesDownloading] = useState(false);
+  const [imageSearch, setImageSearch] = useState("");
+  const selectedImageCount = Object.values(imageSelections).filter(Boolean).length;
+  const allImagesSelected =
+    imageOptions.length > 0 && selectedImageCount === imageOptions.length;
+  const normalizedImageSearch = imageSearch.trim().toLowerCase();
+  const filteredImageOptions = imageOptions.filter((option) => {
+    if (!normalizedImageSearch) return true;
+    const haystack = `${option.image} ${option.services[0] || ""} ${
+      option.version
+    }`.toLowerCase();
+    return haystack.includes(normalizedImageSearch);
+  });
+  const sortedImageOptions = [...filteredImageOptions].sort((a, b) => {
+    const aLabel = (a.services[0] || a.image).toLowerCase();
+    const bLabel = (b.services[0] || b.image).toLowerCase();
+    return aLabel.localeCompare(bLabel);
   });
 
   useEffect(() => {
@@ -70,6 +127,7 @@ export default function ProjectDetailPage() {
       const data = (await response.json()) as ProjectResponse;
       setProject(data.project);
       setComposes(data.composes || []);
+      setCapabilities(data.capabilities || null);
     }
 
     load().catch(() => setError("Failed to load project"));
@@ -103,10 +161,16 @@ export default function ProjectDetailPage() {
     setExporting(true);
     setExportOpen(false);
     try {
+      const imageDownloadIds = Object.entries(exportImageSelections)
+        .filter(([, selected]) => selected)
+        .map(([id]) => id);
       const response = await fetch(`/api/composes/${exportTarget.id}/export`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(exportOptions),
+        body: JSON.stringify({
+          ...exportOptions,
+          imageDownloadIds,
+        }),
       });
       if (!response.ok) {
         setError("Failed to export compose");
@@ -131,6 +195,48 @@ export default function ProjectDetailPage() {
       setExporting(false);
     }
   };
+
+  const openExport = async (compose: ComposeRow) => {
+    setExportTarget(compose);
+    setExportOptions({
+      includeCompose: true,
+      includeConfigs: true,
+      includeScripts: true,
+      includeUtilities: true,
+    });
+    setExportOpen(true);
+    setExportImagesError("");
+    setExportImagesLoading(true);
+    setExportImageDownloads([]);
+    setExportImageSelections({});
+    setExportImageDetailsOpen({});
+    try {
+      const response = await fetch(`/api/composes/${compose.id}/images`);
+      if (!response.ok) {
+        throw new Error("Failed to load image downloads");
+      }
+      const data = (await response.json()) as {
+        downloads: ImageDownloadRow[];
+      };
+      const downloads = data.downloads || [];
+      setExportImageDownloads(downloads);
+      const nextSelections: Record<string, boolean> = {};
+      downloads.forEach((download) => {
+        nextSelections[download.id] = false;
+      });
+      setExportImageSelections(nextSelections);
+    } catch (loadError) {
+      setExportImagesError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Failed to load image downloads"
+      );
+    } finally {
+      setExportImagesLoading(false);
+    }
+  };
+
+  const imageDownloadsEnabled = Boolean(capabilities?.imageDownloads);
 
   const openSnapshots = async (compose: ComposeRow) => {
     setSnapshotTarget(compose);
@@ -216,6 +322,105 @@ export default function ProjectDetailPage() {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+  };
+
+  const openImageDownloads = async (compose: ComposeRow) => {
+    setImageTarget(compose);
+    setImagesOpen(true);
+    setImagesError("");
+    setImagesLoading(true);
+    try {
+      const response = await fetch(`/api/composes/${compose.id}/images`);
+      if (!response.ok) {
+        throw new Error("Failed to load images");
+      }
+      const data = (await response.json()) as {
+        images: ImageOption[];
+        downloads: ImageDownloadRow[];
+      };
+      setImageOptions(data.images || []);
+      setImageDownloads(data.downloads || []);
+      const nextSelections: Record<string, boolean> = {};
+      (data.images || []).forEach((item) => {
+        nextSelections[item.image] = true;
+      });
+      setImageSelections(nextSelections);
+    } catch (loadError) {
+      setImagesError(
+        loadError instanceof Error ? loadError.message : "Failed to load images"
+      );
+    } finally {
+      setImagesLoading(false);
+    }
+  };
+
+  const handleCreateImageDownload = async () => {
+    if (!imageTarget || imagesDownloading) return;
+    const selected = Object.entries(imageSelections)
+      .filter(([, value]) => value)
+      .map(([image]) => image);
+    if (selected.length === 0) {
+      setImagesError("Select at least one image");
+      return;
+    }
+    setImagesDownloading(true);
+    setImagesError("");
+    try {
+      const response = await fetch(`/api/composes/${imageTarget.id}/images`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ images: selected }),
+      });
+      if (!response.ok) {
+        const data = (await response.json()) as { error?: string };
+        throw new Error(data.error || "Failed to download images");
+      }
+      const data = (await response.json()) as { download: ImageDownloadRow };
+      setImageDownloads((prev) => [data.download, ...prev]);
+    } catch (downloadError) {
+      setImagesError(
+        downloadError instanceof Error
+          ? downloadError.message
+          : "Failed to download images"
+      );
+    } finally {
+      setImagesDownloading(false);
+    }
+  };
+
+  const handleDownloadImageTar = async (download: ImageDownloadRow) => {
+    if (!imageTarget) return;
+    const response = await fetch(
+      `/api/composes/${imageTarget.id}/images/${download.id}`
+    );
+    if (!response.ok) {
+      setImagesError("Failed to download tar");
+      return;
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = download.fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDeleteImageDownload = async (download: ImageDownloadRow) => {
+    if (!imageTarget) return;
+    const confirmed = window.confirm("Delete this downloaded file?");
+    if (!confirmed) return;
+    const response = await fetch(
+      `/api/composes/${imageTarget.id}/images/${download.id}`,
+      { method: "DELETE" }
+    );
+    if (!response.ok) {
+      setImagesError("Failed to delete download");
+      return;
+    }
+    setImageDownloads((prev) => prev.filter((item) => item.id !== download.id));
   };
 
   const handleDeleteSnapshot = async (snapshotId: string) => {
@@ -381,16 +586,7 @@ export default function ProjectDetailPage() {
                       Duplicate
                     </button>
                     <button
-                      onClick={() => {
-                        setExportTarget(compose);
-                        setExportOptions({
-                          includeCompose: true,
-                          includeConfigs: true,
-                          includeScripts: true,
-                          includeUtilities: true,
-                        });
-                        setExportOpen(true);
-                      }}
+                      onClick={() => openExport(compose)}
                       className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm text-emerald-700"
                     >
                       <svg
@@ -403,6 +599,37 @@ export default function ProjectDetailPage() {
                       </svg>
                       Export
                     </button>
+                    <div className="relative group">
+                      <button
+                        onClick={() => openImageDownloads(compose)}
+                        className={`rounded-lg border px-3 py-1 text-sm ${
+                          imageDownloadsEnabled
+                            ? "border-indigo-200 bg-indigo-50 text-indigo-700"
+                            : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                        }`}
+                        disabled={!imageDownloadsEnabled}
+                        title={
+                          imageDownloadsEnabled
+                            ? "Download images"
+                            : "Configure Docker socket and registry credentials to enable"
+                        }
+                      >
+                        <svg
+                          aria-hidden="true"
+                          viewBox="0 0 24 24"
+                          className="mr-2 inline-block h-4 w-4"
+                          fill="currentColor"
+                        >
+                          <path d="M19 13a1 1 0 0 0-1 1v3H6v-3a1 1 0 1 0-2 0v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3a1 1 0 0 0-1-1zm-7-9a1 1 0 0 0-1 1v7.59L8.7 10.3a1 1 0 0 0-1.4 1.42l4.01 4.01a1 1 0 0 0 1.4 0l4.01-4.01a1 1 0 1 0-1.4-1.42L13 12.6V5a1 1 0 0 0-1-1z" />
+                        </svg>
+                        Download Images
+                      </button>
+                      {!imageDownloadsEnabled ? (
+                        <div className="pointer-events-none absolute left-1/2 top-full z-10 hidden -translate-x-1/2 translate-y-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 shadow-lg group-hover:block">
+                          Configure Docker socket + registry envs to enable
+                        </div>
+                      ) : null}
+                    </div>
                     <button
                       onClick={() => openSnapshots(compose)}
                       className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-1 text-sm text-violet-700"
@@ -649,6 +876,200 @@ export default function ProjectDetailPage() {
         </div>
       ) : null}
 
+      {imagesOpen && imageTarget ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-8">
+          <div className="flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Download images
+                </h2>
+                <p className="text-sm text-slate-500">
+                  {imageTarget.name} · {project.name}
+                </p>
+              </div>
+              <button
+                onClick={() => setImagesOpen(false)}
+                className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600"
+                disabled={imagesDownloading}
+              >
+                Close
+              </button>
+            </div>
+
+            {imagesLoading ? (
+              <p className="mt-6 text-sm text-slate-500">Loading images...</p>
+            ) : (
+              <div className="mt-6 flex flex-1 flex-col gap-6 overflow-auto">
+                <section className="space-y-3">
+                  <h3 className="text-sm font-semibold text-slate-700">
+                    Requested downloads
+                  </h3>
+                  {imageDownloads.length === 0 ? (
+                    <p className="text-sm text-slate-500">
+                      No downloads requested yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {imageDownloads.map((download) => (
+                        <div
+                          key={download.id}
+                          className="rounded-xl border border-slate-200 p-3 text-sm text-slate-700"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-semibold text-slate-900">
+                                {download.fileName}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {new Date(download.createdAt).toLocaleString()}
+                              </p>
+                            </div>
+                            <span
+                              className={`rounded-full px-2 py-1 text-xs ${
+                                download.status === "completed"
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : download.status === "failed"
+                                  ? "bg-rose-50 text-rose-700"
+                                  : "bg-slate-100 text-slate-600"
+                              }`}
+                            >
+                              {download.status}
+                            </span>
+                          </div>
+                          {download.images.length > 0 ? (
+                            <div className="mt-2 text-xs text-slate-500">
+                              {download.images.map((item) => (
+                                <p key={item.image}>
+                                  {(item.services[0] || "Service") + " · "}
+                                  {item.image} · {item.version}
+                                </p>
+                              ))}
+                            </div>
+                          ) : null}
+                          {download.errorMessage ? (
+                            <p className="mt-2 text-xs text-rose-600">
+                              {download.errorMessage}
+                            </p>
+                          ) : null}
+                          {download.status === "completed" ? (
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                              <button
+                                onClick={() => handleDownloadImageTar(download)}
+                                className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs text-emerald-700"
+                              >
+                                Download tar
+                              </button>
+                              <button
+                                onClick={() => handleDeleteImageDownload(download)}
+                                className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1 text-xs text-rose-700"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                <section className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-slate-700">
+                      Available images
+                    </h3>
+                    {imageOptions.length > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextSelections: Record<string, boolean> = {};
+                          imageOptions.forEach((option) => {
+                            nextSelections[option.image] = !allImagesSelected;
+                          });
+                          setImageSelections(nextSelections);
+                        }}
+                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                      >
+                        {allImagesSelected ? "Deselect all" : "Select all"}
+                      </button>
+                    ) : null}
+                  </div>
+                  <input
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                    placeholder="Search images..."
+                    value={imageSearch}
+                    onChange={(event) => setImageSearch(event.target.value)}
+                  />
+                  {imageOptions.length === 0 ? (
+                    <p className="text-sm text-slate-500">
+                      No images available for this compose.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {sortedImageOptions.map((option) => (
+                        <label
+                          key={option.image}
+                          className="flex items-start gap-3 rounded-xl border border-slate-200 p-3 text-sm text-slate-700"
+                        >
+                          <input
+                            type="checkbox"
+                            className="mt-1"
+                            checked={Boolean(imageSelections[option.image])}
+                            onChange={() =>
+                              setImageSelections((prev) => ({
+                                ...prev,
+                                [option.image]: !prev[option.image],
+                              }))
+                            }
+                          />
+                          <div>
+                            <p className="font-semibold text-slate-900">
+                              {option.services[0] || "Service"}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {option.image}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              Version: {option.version}
+                            </p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              </div>
+            )}
+
+            {imagesError ? (
+              <p className="mt-4 text-sm text-rose-600">{imagesError}</p>
+            ) : null}
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setImagesOpen(false)}
+                className="rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-600"
+                disabled={imagesDownloading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateImageDownload}
+                className="rounded-full border border-indigo-200 bg-indigo-600 px-4 py-2 text-sm font-semibold text-white"
+                disabled={
+                  imagesDownloading ||
+                  imageOptions.length === 0 ||
+                  selectedImageCount === 0
+                }
+              >
+                {imagesDownloading ? "Downloading..." : "Download images"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {snapshotSaving ? (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4 py-8">
           <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-xl">
@@ -734,6 +1155,83 @@ export default function ProjectDetailPage() {
                 />
                 Utilities
               </label>
+            </div>
+            <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-700">
+                  Include downloaded images
+                </h3>
+                <span className="text-xs text-slate-400">
+                  Optional
+                </span>
+              </div>
+              {exportImagesLoading ? (
+                <p className="mt-3 text-xs text-slate-500">
+                  Loading downloaded images...
+                </p>
+              ) : exportImageDownloads.length === 0 ? (
+                <p className="mt-3 text-xs text-slate-500">
+                  No downloaded image archives available for this compose.
+                </p>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  {exportImageDownloads.map((download) => (
+                    <label
+                      key={download.id}
+                      className="flex items-start gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(exportImageSelections[download.id])}
+                        onChange={() =>
+                          setExportImageSelections((prev) => ({
+                            ...prev,
+                            [download.id]: !prev[download.id],
+                          }))
+                        }
+                      />
+                      <div>
+                        <p className="font-semibold text-slate-800">
+                          {download.fileName}
+                        </p>
+                        <p className="text-[11px] text-slate-500">
+                          {new Date(download.createdAt).toLocaleString()}
+                        </p>
+                        {download.images.length > 0 ? (
+                          <div className="mt-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExportImageDetailsOpen((prev) => ({
+                                  ...prev,
+                                  [download.id]: !prev[download.id],
+                                }))
+                              }
+                              className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700"
+                            >
+                              {exportImageDetailsOpen[download.id]
+                                ? "Hide images"
+                                : `Show images (${download.images.length})`}
+                            </button>
+                            {exportImageDetailsOpen[download.id] ? (
+                              <div className="mt-2 max-h-24 space-y-1 overflow-auto rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-[11px] text-slate-600">
+                                {download.images.map((item) => (
+                                  <p key={item.image}>
+                                    {item.image} · {item.version}
+                                  </p>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+              {exportImagesError ? (
+                <p className="mt-3 text-xs text-rose-600">{exportImagesError}</p>
+              ) : null}
             </div>
             <div className="mt-4 flex items-center justify-end gap-3">
               <button

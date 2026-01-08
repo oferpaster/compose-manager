@@ -94,6 +94,24 @@ function initDb(database: Database.Database) {
     `
     )
     .run();
+  database
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS image_downloads (
+        id TEXT PRIMARY KEY,
+        compose_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        images_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `
+    )
+    .run();
 
   const columns = database.prepare("PRAGMA table_info(composes)").all() as { name: string }[];
   const hasProjectId = columns.some((col) => col.name === "project_id");

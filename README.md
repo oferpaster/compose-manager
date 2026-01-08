@@ -13,6 +13,7 @@ ComposeBuilder is a Next.js app for building Docker Compose files from templates
 - Scripts manager (inline scripts and export selection)
 - Utilities manager (file upload + export selection)
 - Export compose bundles as ZIP with selectable sections
+- Download Docker images via Docker socket (per compose, select images, store tar archives)
 - Snapshots (stored export ZIPs per compose version)
 - Nginx config section (inline edits + export files)
 - Prometheus config (per-service toggle + global inline config)
@@ -42,6 +43,24 @@ docker compose up --build
 ```
 
 The app will be available at http://localhost:3000
+
+### Download images configuration
+
+To enable "Download Images", mount the Docker socket and provide registry credentials:
+
+```yaml
+services:
+  composebuilder:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      DOCKER_SOCKET: /var/run/docker.sock
+      REGISTRY_HOST: "artifactory.example.com:6043"
+      REGISTRY_USERNAME: "your-username"
+      REGISTRY_PASSWORD: "your-password"
+```
+
+Downloaded image tar files are stored in `data/downloads` and can be included in exports.
 
 ## API docs
 
