@@ -952,6 +952,47 @@ export default function BulkTemplatesPage() {
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-sm font-semibold text-slate-700">
+                              Spring Boot
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              Enable application.properties template.
+                            </p>
+                          </div>
+                          <label className="flex items-center gap-2 text-sm text-slate-600">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(selectedService.springBoot)}
+                              onChange={(event) =>
+                                updateExtracted(selectedIndex, {
+                                  ...selectedService,
+                                  springBoot: event.target.checked,
+                                })
+                              }
+                            />
+                            Enable
+                          </label>
+                        </div>
+                        {selectedService.springBoot ? (
+                          <label className="mt-3 block text-sm text-slate-600">
+                            application.properties template
+                            <textarea
+                              className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
+                              value={selectedService.applicationPropertiesTemplate || ""}
+                              onChange={(event) =>
+                                updateExtracted(selectedIndex, {
+                                  ...selectedService,
+                                  applicationPropertiesTemplate: event.target.value,
+                                })
+                              }
+                              placeholder="spring.application.name=service"
+                            />
+                          </label>
+                        ) : null}
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 md:col-span-2">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-700">
                               Prometheus metrics
                             </p>
                             <p className="text-xs text-slate-500">

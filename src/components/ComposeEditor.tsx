@@ -108,6 +108,8 @@ export default function ComposeEditor({
   const [prometheusDraftDirty, setPrometheusDraftDirty] = useState(false);
   const [prometheusAuto, setPrometheusAuto] = useState(true);
   const [isValidationOpen, setIsValidationOpen] = useState(false);
+  const [missingEnvSearch, setMissingEnvSearch] = useState("");
+  const [unusedEnvSearch, setUnusedEnvSearch] = useState("");
   const [isEditMenuOpen, setIsEditMenuOpen] = useState(false);
   const [copiedCompose, setCopiedCompose] = useState(false);
   const [copiedEnv, setCopiedEnv] = useState(false);
@@ -386,19 +388,25 @@ export default function ComposeEditor({
     const value = missingEnvValues[key] ?? "";
     setConfig((prev) => {
       if (prev.globalEnv.some((entry) => entry.key === key)) return prev;
-      return {
+      const next = {
         ...prev,
         globalEnv: [...prev.globalEnv, { key, value }],
       };
+      setValidationConfig(next);
+      return next;
     });
     setMissingEnvValues((prev) => ({ ...prev, [key]: "" }));
   };
 
   const removeUnusedEnv = (key: string) => {
-    setConfig((prev) => ({
-      ...prev,
-      globalEnv: prev.globalEnv.filter((entry) => entry.key !== key),
-    }));
+    setConfig((prev) => {
+      const next = {
+        ...prev,
+        globalEnv: prev.globalEnv.filter((entry) => entry.key !== key),
+      };
+      setValidationConfig(next);
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -945,11 +953,14 @@ export default function ComposeEditor({
           </div>
         </section>
 
-        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">
-            Global environment
-          </h2>
-          <div className="space-y-3">
+        <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <summary className="flex cursor-pointer list-none items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900">
+              Global environment
+            </h2>
+            <span className="text-sm text-slate-500">Toggle</span>
+          </summary>
+          <div className="mt-4 space-y-3">
             {config.globalEnv.map((entry, index) => (
               <div
                 key={`env-${index}`}
@@ -990,11 +1001,11 @@ export default function ComposeEditor({
           </div>
           <button
             onClick={addGlobalEnv}
-            className="cursor-pointer rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-600"
+            className="mt-4 cursor-pointer rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-600"
           >
             + Add global env
           </button>
-        </section>
+        </details>
 
         <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <summary className="flex cursor-pointer list-none items-center justify-between">
@@ -1663,7 +1674,8 @@ export default function ComposeEditor({
             >
               {copiedCompose ? "Copied" : "Copy"}
             </button>
-            <span className="text-xs uppercase tracking-widest text-slate-300">
+            <span className="flex items-center gap-2 text-xs uppercase tracking-widest text-slate-300">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-rose-400" />
               live
             </span>
           </div>
@@ -1706,7 +1718,8 @@ export default function ComposeEditor({
             >
               {copiedEnv ? "Copied" : "Copy"}
             </button>
-            <span className="text-xs uppercase tracking-widest text-slate-300">
+            <span className="flex items-center gap-2 text-xs uppercase tracking-widest text-slate-300">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-rose-400" />
               live
             </span>
           </div>
@@ -1961,32 +1974,48 @@ export default function ComposeEditor({
                 {validation.missing.length === 0 ? (
                   <p className="mt-2 text-sm text-slate-500">None</p>
                 ) : (
-                  <div className="mt-2 space-y-2 text-sm text-rose-600">
-                    {validation.missing.map((key) => (
-                      <div
-                        key={`missing-${key}`}
-                        className="grid items-center gap-2 md:grid-cols-[1fr_1fr_auto]"
-                      >
-                        <span className="font-semibold text-rose-600">{key}</span>
-                        <input
-                          value={missingEnvValues[key] ?? ""}
-                          onChange={(event) =>
-                            setMissingEnvValues((prev) => ({
-                              ...prev,
-                              [key]: event.target.value,
-                            }))
-                          }
-                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                          placeholder="value"
-                        />
-                        <button
-                          onClick={() => addMissingEnv(key)}
-                          className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"
-                        >
-                          Add
-                        </button>
-                      </div>
-                    ))}
+                  <div className="mt-2 space-y-3 text-sm text-rose-600">
+                    <input
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                      placeholder="Search missing envs..."
+                      value={missingEnvSearch}
+                      onChange={(event) => setMissingEnvSearch(event.target.value)}
+                    />
+                    <div className="space-y-2">
+                      {validation.missing
+                        .filter((key) =>
+                          key
+                            .toLowerCase()
+                            .includes(missingEnvSearch.trim().toLowerCase())
+                        )
+                        .map((key) => (
+                          <div
+                            key={`missing-${key}`}
+                            className="grid items-center gap-2 md:grid-cols-[1fr_1fr_auto]"
+                          >
+                            <span className="font-semibold text-rose-600">
+                              {key}
+                            </span>
+                            <input
+                              value={missingEnvValues[key] ?? ""}
+                              onChange={(event) =>
+                                setMissingEnvValues((prev) => ({
+                                  ...prev,
+                                  [key]: event.target.value,
+                                }))
+                              }
+                              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                              placeholder="value"
+                            />
+                            <button
+                              onClick={() => addMissingEnv(key)}
+                              className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"
+                            >
+                              Add
+                            </button>
+                          </div>
+                        ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1997,21 +2026,35 @@ export default function ComposeEditor({
                 {validation.unused.length === 0 ? (
                   <p className="mt-2 text-sm text-slate-500">None</p>
                 ) : (
-                  <div className="mt-2 space-y-2 text-sm text-slate-600">
-                    {validation.unused.map((key) => (
-                      <div
-                        key={`unused-${key}`}
-                        className="flex items-center justify-between gap-2"
-                      >
-                        <span className="font-semibold">{key}</span>
-                        <button
-                          onClick={() => removeUnusedEnv(key)}
-                          className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
+                  <div className="mt-2 space-y-3 text-sm text-slate-600">
+                    <input
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                      placeholder="Search unused envs..."
+                      value={unusedEnvSearch}
+                      onChange={(event) => setUnusedEnvSearch(event.target.value)}
+                    />
+                    <div className="space-y-2">
+                      {validation.unused
+                        .filter((key) =>
+                          key
+                            .toLowerCase()
+                            .includes(unusedEnvSearch.trim().toLowerCase())
+                        )
+                        .map((key) => (
+                          <div
+                            key={`unused-${key}`}
+                            className="flex items-center justify-between gap-2"
+                          >
+                            <span className="font-semibold">{key}</span>
+                            <button
+                              onClick={() => removeUnusedEnv(key)}
+                              className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                    </div>
                   </div>
                 )}
               </div>
