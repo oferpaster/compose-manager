@@ -19,6 +19,11 @@ export function ensureVersionScheduler() {
       const result = await refreshCatalogVersions(catalog);
       if (result.updated) {
         saveCatalog(result.services);
+        console.log(
+          `[versions] Updated template versions for ${result.services.length} services.`
+        );
+      } else {
+        console.log("[versions] No new template versions found.");
       }
     } catch {
       // Scheduler should be silent to avoid noisy logs.

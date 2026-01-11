@@ -24,8 +24,14 @@ function getRegistryBaseUrl() {
 
 function parseImageName(image: string) {
   const imageWithoutDigest = image.split("@")[0];
-  const [pathPart] = imageWithoutDigest.split(":");
-  const segments = pathPart.split("/").filter(Boolean);
+  const lastColon = imageWithoutDigest.lastIndexOf(":");
+  const lastSlash = imageWithoutDigest.lastIndexOf("/");
+  const pathPart =
+    lastColon > -1 && lastColon > lastSlash
+      ? imageWithoutDigest.slice(0, lastColon)
+      : imageWithoutDigest;
+  const cleaned = pathPart.replace(/^https?:\/\//, "");
+  const segments = cleaned.split("/").filter(Boolean);
   if (segments.length === 0) return { registry: "", repository: "" };
   const first = segments[0];
   const hasRegistry = first.includes(".") || first.includes(":");
@@ -37,6 +43,12 @@ function parseImageName(image: string) {
 
 function normalizeHost(host: string) {
   return host.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+}
+
+function isValidVersionTag(tag: string) {
+  if (!tag) return false;
+  if (tag.includes(".sig") || tag.includes(".att")) return false;
+  return /^\d+(?:\.\d+)*$/.test(tag);
 }
 
 export async function fetchImageTags(image: string) {
@@ -62,7 +74,10 @@ export async function fetchImageTags(image: string) {
   if (!response.ok) return null;
   const data = (await response.json()) as { tags?: string[] };
   if (!Array.isArray(data.tags)) return [];
-  return data.tags.filter((tag) => typeof tag === "string" && tag.trim());
+  return data.tags
+    .filter((tag) => typeof tag === "string")
+    .map((tag) => tag.trim())
+    .filter((tag) => isValidVersionTag(tag));
 }
 
 export async function refreshServiceVersions(
