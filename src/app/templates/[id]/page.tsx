@@ -45,6 +45,7 @@ export default function TemplateEditorPage() {
   const router = useRouter();
   const [services, setServices] = useState<ServiceCatalogItem[]>([]);
   const [service, setService] = useState<ServiceCatalogItem>(emptyService());
+  const [versionsDraft, setVersionsDraft] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [networks, setNetworks] = useState<string[]>([]);
@@ -69,6 +70,10 @@ export default function TemplateEditorPage() {
   }, [params.id]);
 
   useEffect(() => {
+    setVersionsDraft(service.versions.join("\n"));
+  }, [service.id]);
+
+  useEffect(() => {
     async function loadNetworks() {
       const response = await fetch("/api/networks");
       const data = (await response.json()) as { networks: { name: string }[] };
@@ -86,6 +91,12 @@ export default function TemplateEditorPage() {
     [service.defaultEnv]
   );
 
+  const parseVersionsText = (text: string) =>
+    text
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
   const handleSave = async () => {
     if (!service.id.trim()) {
       setSaveMessage("Service ID is required");
@@ -95,14 +106,19 @@ export default function TemplateEditorPage() {
     setIsSaving(true);
     setSaveMessage("");
 
+    const nextService = {
+      ...service,
+      versions: parseVersionsText(versionsDraft),
+    };
+
     const nextServices = [...services];
     const existingIndex = nextServices.findIndex(
-      (item) => item.id === service.id
+      (item) => item.id === nextService.id
     );
     if (existingIndex >= 0) {
-      nextServices[existingIndex] = service;
+      nextServices[existingIndex] = nextService;
     } else {
-      nextServices.push(service);
+      nextServices.push(nextService);
     }
 
     try {
@@ -116,6 +132,7 @@ export default function TemplateEditorPage() {
       }
       setSaveMessage("Saved");
       setServices(nextServices);
+      setService(nextService);
     } catch (error) {
       setSaveMessage(error instanceof Error ? error.message : "Failed to save");
     } finally {
@@ -211,14 +228,12 @@ export default function TemplateEditorPage() {
               Versions (one per line)
               <textarea
                 className="mt-2 min-h-[120px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                value={service.versions.join("\n")}
-                onChange={(event) =>
+                value={versionsDraft}
+                onChange={(event) => setVersionsDraft(event.target.value)}
+                onBlur={() =>
                   setService({
                     ...service,
-                    versions: event.target.value
-                      .split("\n")
-                      .map((item) => item.trim())
-                      .filter(Boolean),
+                    versions: parseVersionsText(versionsDraft),
                   })
                 }
                 placeholder="1.0.0"
