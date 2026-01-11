@@ -51,6 +51,20 @@ function isValidVersionTag(tag: string) {
   return /^\d+(?:\.\d+)*$/.test(tag);
 }
 
+function compareVersions(a: string, b: string) {
+  const aParts = a.split(".").map((part) => Number(part));
+  const bParts = b.split(".").map((part) => Number(part));
+  const maxLen = Math.max(aParts.length, bParts.length);
+  for (let i = 0; i < maxLen; i += 1) {
+    const aVal = aParts[i] ?? 0;
+    const bVal = bParts[i] ?? 0;
+    if (aVal !== bVal) {
+      return bVal - aVal;
+    }
+  }
+  return 0;
+}
+
 export async function fetchImageTags(image: string) {
   if (!isRegistryConfigured()) return null;
   const { registry, repository } = parseImageName(image);
@@ -95,10 +109,11 @@ export async function refreshServiceVersions(
       existingSet.add(tag);
     }
   });
-  if (next.length === existing.length) {
+  const sorted = [...next].sort(compareVersions);
+  if (sorted.length === existing.length) {
     return { service, updated: false };
   }
-  return { service: { ...service, versions: next }, updated: true };
+  return { service: { ...service, versions: sorted }, updated: true };
 }
 
 export async function refreshCatalogVersions(

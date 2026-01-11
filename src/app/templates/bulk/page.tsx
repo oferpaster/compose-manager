@@ -248,6 +248,20 @@ function mergeUnique<T>(base: T[], next: T[]) {
   return Array.from(set);
 }
 
+function sortVersions(versions: string[]) {
+  return [...versions].sort((a, b) => {
+    const aParts = a.split(".").map((part) => Number(part));
+    const bParts = b.split(".").map((part) => Number(part));
+    const maxLen = Math.max(aParts.length, bParts.length);
+    for (let i = 0; i < maxLen; i += 1) {
+      const aVal = aParts[i] ?? 0;
+      const bVal = bParts[i] ?? 0;
+      if (aVal !== bVal) return bVal - aVal;
+    }
+    return 0;
+  });
+}
+
 export default function BulkTemplatesPage() {
   const router = useRouter();
   const [composeText, setComposeText] = useState("");
@@ -392,7 +406,9 @@ export default function BulkTemplatesPage() {
 
       const existing = map.get(imageName);
       if (existing) {
-        existing.versions = mergeUnique(existing.versions, [version]);
+        existing.versions = sortVersions(
+          mergeUnique(existing.versions, [version])
+        );
         existing.defaultPorts = mergeUnique(existing.defaultPorts || [], ports);
         existing.defaultVolumes = mergeUnique(
           existing.defaultVolumes || [],
@@ -551,9 +567,11 @@ export default function BulkTemplatesPage() {
         const index = next.findIndex((item) => item.image === payload.image);
         if (index >= 0) {
           const current = next[index];
-          const mergedVersions = mergeUnique(
-            current.versions || [],
-            payload.versions || []
+          const mergedVersions = sortVersions(
+            mergeUnique(
+              current.versions || [],
+              payload.versions || []
+            )
           );
           next[index] = {
             ...current,
@@ -602,7 +620,7 @@ export default function BulkTemplatesPage() {
         } else {
           const id = payload.id.trim();
           if (!id) return;
-          next.push(payload);
+          next.push({ ...payload, versions: sortVersions(payload.versions || []) });
         }
       });
 

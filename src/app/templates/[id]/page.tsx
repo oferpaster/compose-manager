@@ -108,6 +108,19 @@ export default function TemplateEditorPage() {
     [services]
   );
 
+  const sortVersions = (versions: string[]) =>
+    [...versions].sort((a, b) => {
+      const aParts = a.split(".").map((part) => Number(part));
+      const bParts = b.split(".").map((part) => Number(part));
+      const maxLen = Math.max(aParts.length, bParts.length);
+      for (let i = 0; i < maxLen; i += 1) {
+        const aVal = aParts[i] ?? 0;
+        const bVal = bParts[i] ?? 0;
+        if (aVal !== bVal) return bVal - aVal;
+      }
+      return 0;
+    });
+
   const handleSave = async () => {
     if (!service.id.trim()) {
       setSaveMessage("Service ID is required");
@@ -119,7 +132,7 @@ export default function TemplateEditorPage() {
 
     const nextService = {
       ...service,
-      versions: service.versions || [],
+      versions: sortVersions(service.versions || []),
     };
 
     const nextServices = [...services];
@@ -343,7 +356,7 @@ export default function TemplateEditorPage() {
                       }
                       setService({
                         ...service,
-                        versions: [...versions, trimmed],
+                        versions: sortVersions([...versions, trimmed]),
                       });
                       setNewVersion("");
                     }}
