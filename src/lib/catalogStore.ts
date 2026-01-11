@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { SERVICE_CATALOG, ServiceCatalogItem } from "./serviceCatalog";
+import { ServiceCatalogItem } from "./serviceCatalog";
 
 const CATALOG_PATH = path.join(process.cwd(), "data", "catalog.json");
 

@@ -237,6 +237,16 @@ const openApiSpec = {
           defaultHealthcheckTimeout: { type: "string" },
           defaultHealthcheckRetries: { type: "integer" },
           defaultHealthcheckStartPeriod: { type: "string" },
+          defaultDependsOn: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                condition: { type: "string" },
+              },
+            },
+          },
           springBoot: { type: "boolean" },
           propertiesTemplateFile: { type: "string" },
           applicationPropertiesTemplate: { type: "string" },

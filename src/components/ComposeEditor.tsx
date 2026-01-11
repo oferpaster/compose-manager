@@ -225,16 +225,7 @@ export default function ComposeEditor({
 
   useEffect(() => {
     setValidationConfig(config);
-  }, [
-    config.services,
-    config.networks,
-    config.name,
-    config.scriptIds,
-    config.utilityIds,
-    config.loggingTemplate,
-    config.nginx,
-    config.prometheus,
-  ]);
+  }, [config]);
 
   const validationComposeYaml = useMemo(
     () =>

@@ -35,6 +35,7 @@ const emptyService = (): ServiceCatalogItem => ({
   defaultHealthcheckTimeout: "",
   defaultHealthcheckRetries: undefined,
   defaultHealthcheckStartPeriod: "",
+  defaultDependsOn: [],
   springBoot: false,
   propertiesTemplateFile: "",
   applicationPropertiesTemplate: "",
@@ -71,7 +72,7 @@ export default function TemplateEditorPage() {
 
   useEffect(() => {
     setVersionsDraft(service.versions.join("\n"));
-  }, [service.id]);
+  }, [service.id, service.versions]);
 
   useEffect(() => {
     async function loadNetworks() {
@@ -89,6 +90,14 @@ export default function TemplateEditorPage() {
         .map(([key, value]) => `${key}=${value}`)
         .join("\n"),
     [service.defaultEnv]
+  );
+  const dependsOnOptions = useMemo(
+    () =>
+      services
+        .map((item) => item.id)
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b)),
+    [services]
   );
 
   const parseVersionsText = (text: string) =>
@@ -513,6 +522,90 @@ export default function TemplateEditorPage() {
                 placeholder="NET_ADMIN"
               />
             </label>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-slate-700">Depends on</h4>
+              <button
+                onClick={() =>
+                  setService({
+                    ...service,
+                    defaultDependsOn: [
+                      ...(service.defaultDependsOn || []),
+                      { name: "", condition: "service_started" },
+                    ],
+                  })
+                }
+                className="rounded-lg border border-dashed border-slate-300 px-3 py-1 text-xs text-slate-600"
+              >
+                + Add dependency
+              </button>
+            </div>
+            {(service.defaultDependsOn || []).length === 0 ? (
+              <p className="text-sm text-slate-500">No dependencies added.</p>
+            ) : (
+              (service.defaultDependsOn || []).map((entry, index) => (
+                <div
+                  key={`depends-${service.id}-${index}`}
+                  className="grid gap-3 md:grid-cols-[1fr_220px_auto]"
+                >
+                  <select
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                    value={entry.name}
+                    onChange={(event) => {
+                      const next = [...(service.defaultDependsOn || [])];
+                      next[index] = { ...entry, name: event.target.value };
+                      setService({ ...service, defaultDependsOn: next });
+                    }}
+                  >
+                    <option value="">Select service</option>
+                    {dependsOnOptions
+                      .filter((name) => name !== service.id)
+                      .filter(
+                        (name) =>
+                          name === entry.name ||
+                          !(service.defaultDependsOn || []).some(
+                            (item, idx) =>
+                              idx !== index && item.name === name
+                          )
+                      )
+                      .map((name) => (
+                        <option key={`dep-${service.id}-${index}-${name}`} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                  </select>
+                  <select
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                    value={entry.condition}
+                    onChange={(event) => {
+                      const next = [...(service.defaultDependsOn || [])];
+                      next[index] = { ...entry, condition: event.target.value };
+                      setService({ ...service, defaultDependsOn: next });
+                    }}
+                  >
+                    <option value="">No condition</option>
+                    <option value="service_started">Service started</option>
+                    <option value="service_healthy">Service healthy</option>
+                    <option value="service_completed_successfully">
+                      Service completed successfully
+                    </option>
+                  </select>
+                  <button
+                    onClick={() => {
+                      const next = (service.defaultDependsOn || []).filter(
+                        (_, idx) => idx !== index
+                      );
+                      setService({ ...service, defaultDependsOn: next });
+                    }}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))
+            )}
           </div>
 
           <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">

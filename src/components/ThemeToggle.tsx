@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
 const STORAGE_KEY = "composebuilder-theme";
+const THEME_EVENT = "composebuilder-theme-change";
 const THEMES = ["auto", "light", "dark"] as const;
 
 type ThemeMode = (typeof THEMES)[number];
@@ -16,22 +17,38 @@ function applyTheme(mode: ThemeMode) {
   root.setAttribute("data-theme", mode);
 }
 
+function getStoredTheme(): ThemeMode {
+  if (typeof window === "undefined") return "auto";
+  const stored = window.localStorage.getItem(STORAGE_KEY) as ThemeMode | null;
+  return stored && THEMES.includes(stored) ? stored : "auto";
+}
+
 export default function ThemeToggle() {
-  const [mode, setMode] = useState<ThemeMode>("auto");
+  const mode = useSyncExternalStore<ThemeMode>(
+    (listener) => {
+      if (typeof window === "undefined") return () => {};
+      const handler = () => listener();
+      window.addEventListener("storage", handler);
+      window.addEventListener(THEME_EVENT, handler);
+      return () => {
+        window.removeEventListener("storage", handler);
+        window.removeEventListener(THEME_EVENT, handler);
+      };
+    },
+    () => getStoredTheme(),
+    () => "auto"
+  );
 
   useEffect(() => {
-    const stored = window.localStorage.getItem(STORAGE_KEY) as ThemeMode | null;
-    const initial = stored && THEMES.includes(stored) ? stored : "auto";
-    setMode(initial);
-    applyTheme(initial);
-  }, []);
+    applyTheme(mode);
+  }, [mode]);
 
   const cycleMode = () => {
     const currentIndex = THEMES.indexOf(mode);
     const next = THEMES[(currentIndex + 1) % THEMES.length];
-    setMode(next);
     window.localStorage.setItem(STORAGE_KEY, next);
     applyTheme(next);
+    window.dispatchEvent(new Event(THEME_EVENT));
   };
 
   const label =

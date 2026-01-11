@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import ServiceInstanceEditor from "@/components/ServiceInstanceEditor";
 import {
@@ -65,16 +65,22 @@ export default function AddServicePage() {
     return Array.from(names);
   }, [compose, instances]);
 
-  const loadTemplate = async (serviceIdToLoad: string) => {
-    if (templateCache[serviceIdToLoad]) return templateCache[serviceIdToLoad];
+  const loadTemplate = useCallback(
+    async (serviceIdToLoad: string) => {
+      if (templateCache[serviceIdToLoad]) return templateCache[serviceIdToLoad];
 
-    const response = await fetch(`/api/templates/${serviceIdToLoad}`);
-    if (!response.ok) return "";
-    const data = (await response.json()) as { template: string };
+      const response = await fetch(`/api/templates/${serviceIdToLoad}`);
+      if (!response.ok) return "";
+      const data = (await response.json()) as { template: string };
 
-    setTemplateCache((prev) => ({ ...prev, [serviceIdToLoad]: data.template }));
-    return data.template;
-  };
+      setTemplateCache((prev) => ({
+        ...prev,
+        [serviceIdToLoad]: data.template,
+      }));
+      return data.template;
+    },
+    [templateCache]
+  );
 
   useEffect(() => {
     if (!compose || initialized || catalog.services.length === 0) return;
@@ -127,7 +133,15 @@ export default function AddServicePage() {
     }
 
     setInitialized(true);
-  }, [compose, catalog.services, serviceId, versionParam, countParam, initialized]);
+  }, [
+    compose,
+    catalog.services,
+    serviceId,
+    versionParam,
+    countParam,
+    initialized,
+    loadTemplate,
+  ]);
 
   const updateInstance = (id: string, next: ServiceConfig) => {
     setInstances((prev) => prev.map((item) => (item.id === id ? next : item)));

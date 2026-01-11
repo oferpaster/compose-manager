@@ -37,6 +37,7 @@ const emptyService = (): ServiceCatalogItem => ({
   defaultHealthcheckTimeout: "",
   defaultHealthcheckRetries: undefined,
   defaultHealthcheckStartPeriod: "",
+  defaultDependsOn: [],
   springBoot: false,
   propertiesTemplateFile: "",
   applicationPropertiesTemplate: "",
@@ -156,6 +157,42 @@ function parseCommand(value: unknown) {
   return "";
 }
 
+function normalizeServiceName(name: string) {
+  return name.replace(/-\d+$/, "").trim();
+}
+
+function parseDependsOn(value: unknown) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => normalizeServiceName(String(item)))
+      .filter(Boolean)
+      .map((name) => ({ name, condition: "" }));
+  }
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([name, entry]) => {
+        const condition =
+          entry && typeof entry === "object" && !Array.isArray(entry)
+            ? String((entry as { condition?: string }).condition || "")
+            : "";
+        return { name: normalizeServiceName(name), condition };
+      })
+      .filter((entry) => entry.name.length > 0);
+  }
+  return [];
+}
+
+function mergeDependsOn(
+  current: { name: string; condition: string }[],
+  next: { name: string; condition: string }[]
+) {
+  const map = new Map(current.map((entry) => [entry.name, entry]));
+  next.forEach((entry) => {
+    map.set(entry.name, entry);
+  });
+  return Array.from(map.values());
+}
+
 function parseHealthcheck(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {
@@ -221,6 +258,9 @@ export default function BulkTemplatesPage() {
     { name: string; driver?: string }[]
   >([]);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [catalogServices, setCatalogServices] = useState<ServiceCatalogItem[]>(
+    []
+  );
   const [existingNetworks, setExistingNetworks] = useState<
     { name: string; driver?: string }[]
   >([]);
@@ -231,6 +271,18 @@ export default function BulkTemplatesPage() {
   useEffect(() => {
     setSaveMessage("");
   }, [composeText]);
+
+  useEffect(() => {
+    async function loadCatalog() {
+      const response = await fetch("/api/catalog-config");
+      const data = (await response.json()) as {
+        services: ServiceCatalogItem[];
+      };
+      setCatalogServices(data.services || []);
+    }
+
+    loadCatalog().catch(() => null);
+  }, []);
 
   useEffect(() => {
     if (extracted.length === 0) {
@@ -326,6 +378,7 @@ export default function BulkTemplatesPage() {
       const healthcheck = parseHealthcheck(service.healthcheck);
       const command = parseCommand(service.command);
       const entrypoint = parseCommand(service.entrypoint);
+      const dependsOn = parseDependsOn(service.depends_on);
       const springBoot =
         volumes.some((vol) => vol.includes("application.properties")) ||
         hasApplicationPropertiesVolume(service.volumes);
@@ -350,6 +403,10 @@ export default function BulkTemplatesPage() {
           networks
         );
         existing.defaultEnv = { ...existing.defaultEnv, ...env };
+        existing.defaultDependsOn = mergeDependsOn(
+          existing.defaultDependsOn || [],
+          dependsOn
+        );
         if (springBoot && existing.defaultPrometheusEnabled !== true) {
           existing.defaultPrometheusEnabled = true;
           existing.defaultPrometheusMetricsPath =
@@ -395,6 +452,7 @@ export default function BulkTemplatesPage() {
       base.defaultPid = pid;
       base.defaultUser = user;
       base.defaultPrivileged = privileged;
+      base.defaultDependsOn = dependsOn;
       base.defaultPrometheusEnabled = false;
       base.defaultPrometheusPort = "";
       base.defaultPrometheusMetricsPath = "";
@@ -488,7 +546,8 @@ export default function BulkTemplatesPage() {
       const next = [...existing];
 
       extracted.forEach((service) => {
-        const { sourceName: _sourceName, ...payload } = service;
+        const { sourceName, ...payload } = service;
+        void sourceName;
         const index = next.findIndex((item) => item.image === payload.image);
         if (index >= 0) {
           const current = next[index];
@@ -513,6 +572,7 @@ export default function BulkTemplatesPage() {
             defaultEntrypoint: payload.defaultEntrypoint || "",
             defaultNetworkMode: payload.defaultNetworkMode || "",
             defaultLogging: payload.defaultLogging || "",
+            defaultDependsOn: payload.defaultDependsOn || [],
             defaultHealthcheckTest: payload.defaultHealthcheckTest || "",
             defaultHealthcheckInterval:
               payload.defaultHealthcheckInterval || "",
@@ -577,6 +637,15 @@ export default function BulkTemplatesPage() {
   });
   const selectedService =
     selectedIndex >= 0 ? extracted[selectedIndex] : null;
+  const dependsOnOptions = Array.from(
+    new Set(
+      [
+        ...catalogServices.map((service) => service.id),
+        ...extracted.map((service) => service.id || service.name || ""),
+        selectedService?.id || "",
+      ].filter(Boolean)
+    )
+  ).sort((a, b) => a.localeCompare(b));
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-12">
@@ -1101,6 +1170,129 @@ export default function BulkTemplatesPage() {
                           placeholder="/bin/app"
                         />
                       </label>
+                      <div className="space-y-3 md:col-span-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-sm font-semibold text-slate-700">
+                            Depends on
+                          </h4>
+                          <button
+                            onClick={() =>
+                              updateExtracted(selectedIndex, {
+                                ...selectedService,
+                                defaultDependsOn: [
+                                  ...(selectedService.defaultDependsOn || []),
+                                  { name: "", condition: "service_started" },
+                                ],
+                              })
+                            }
+                            className="rounded-lg border border-dashed border-slate-300 px-3 py-1 text-xs text-slate-600"
+                          >
+                            + Add dependency
+                          </button>
+                        </div>
+                        {(selectedService.defaultDependsOn || []).length === 0 ? (
+                          <p className="text-sm text-slate-500">
+                            No dependencies added.
+                          </p>
+                        ) : (
+                          (selectedService.defaultDependsOn || []).map(
+                            (entry, index) => (
+                              <div
+                                key={`depends-${selectedService.id}-${index}`}
+                                className="grid gap-3 md:grid-cols-[1fr_220px_auto]"
+                              >
+                                <select
+                                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                                  value={entry.name}
+                                  onChange={(event) => {
+                                    const next = [
+                                      ...(selectedService.defaultDependsOn ||
+                                        []),
+                                    ];
+                                    next[index] = {
+                                      ...entry,
+                                      name: event.target.value,
+                                    };
+                                    updateExtracted(selectedIndex, {
+                                      ...selectedService,
+                                      defaultDependsOn: next,
+                                    });
+                                  }}
+                                >
+                                  <option value="">Select service</option>
+                                  {dependsOnOptions
+                                    .filter(
+                                      (name) => name !== selectedService.id
+                                    )
+                                    .filter(
+                                      (name) =>
+                                        name === entry.name ||
+                                        !(selectedService.defaultDependsOn ||
+                                          []).some(
+                                          (item, idx) =>
+                                            idx !== index &&
+                                            item.name === name
+                                        )
+                                    )
+                                    .map((name) => (
+                                      <option
+                                        key={`dep-${selectedService.id}-${index}-${name}`}
+                                        value={name}
+                                      >
+                                        {name}
+                                      </option>
+                                    ))}
+                                </select>
+                                <select
+                                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                                  value={entry.condition}
+                                  onChange={(event) => {
+                                    const next = [
+                                      ...(selectedService.defaultDependsOn ||
+                                        []),
+                                    ];
+                                    next[index] = {
+                                      ...entry,
+                                      condition: event.target.value,
+                                    };
+                                    updateExtracted(selectedIndex, {
+                                      ...selectedService,
+                                      defaultDependsOn: next,
+                                    });
+                                  }}
+                                >
+                                  <option value="">No condition</option>
+                                  <option value="service_started">
+                                    Service started
+                                  </option>
+                                  <option value="service_healthy">
+                                    Service healthy
+                                  </option>
+                                  <option value="service_completed_successfully">
+                                    Service completed successfully
+                                  </option>
+                                </select>
+                                <button
+                                  onClick={() => {
+                                    const next =
+                                      (selectedService.defaultDependsOn ||
+                                        []).filter(
+                                        (_, idx) => idx !== index
+                                      );
+                                    updateExtracted(selectedIndex, {
+                                      ...selectedService,
+                                      defaultDependsOn: next,
+                                    });
+                                  }}
+                                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            )
+                          )
+                        )}
+                      </div>
                       <label className="text-sm text-slate-600">
                         Default ports (one per line)
                         <textarea

@@ -297,7 +297,12 @@ export function createServiceConfig(
       startPeriod: service.defaultHealthcheckStartPeriod || "",
     },
     extraHosts: [],
-    dependsOn: [],
+    dependsOn: service.defaultDependsOn
+      ? service.defaultDependsOn.map((entry) => ({
+          name: entry.name,
+          condition: entry.condition,
+        }))
+      : [],
     extraYaml: "",
     applicationProperties: "",
     prometheusEnabled: Boolean(service.defaultPrometheusEnabled),

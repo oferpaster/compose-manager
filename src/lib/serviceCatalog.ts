@@ -1,3 +1,8 @@
+export type TemplateDependsOn = {
+  name: string;
+  condition: string;
+};
+
 export type ServiceCatalogItem = {
   id: string;
   name: string;
@@ -29,6 +34,7 @@ export type ServiceCatalogItem = {
   defaultHealthcheckTimeout?: string;
   defaultHealthcheckRetries?: number;
   defaultHealthcheckStartPeriod?: string;
+  defaultDependsOn?: TemplateDependsOn[];
   springBoot?: boolean;
   propertiesTemplateFile?: string;
   applicationPropertiesTemplate?: string;

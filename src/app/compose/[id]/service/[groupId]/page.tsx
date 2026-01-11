@@ -107,7 +107,17 @@ export default function EditServiceGroupPage() {
   };
 
   const removeInstance = (id: string) => {
-    setInstances((prev) => prev.filter((item) => item.id !== id));
+    setInstances((prev) => {
+      const removed = prev.find((item) => item.id === id);
+      const remaining = prev.filter((item) => item.id !== id);
+      if (!removed) return remaining;
+      return remaining.map((service) => ({
+        ...service,
+        dependsOn: service.dependsOn.filter(
+          (entry) => entry.name !== removed.name
+        ),
+      }));
+    });
   };
 
   const availableServiceNames = useMemo(() => {

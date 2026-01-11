@@ -81,7 +81,7 @@ export default function ServiceInstanceEditor({
         if (template) updateField("applicationProperties", template);
       });
     }
-  }, [serviceInfo, service.applicationProperties, onLoadTemplate]);
+  }, [serviceInfo, service.applicationProperties, onLoadTemplate, updateField]);
 
   return (
     <div
