@@ -702,6 +702,77 @@ const openApiSpec = {
         },
       },
     },
+    "/api/templates/versions/status": {
+      get: {
+        tags: ["Templates"],
+        summary: "Check if registry version refresh is enabled",
+        responses: {
+          "200": {
+            description: "Registry status",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: { enabled: { type: "boolean" } },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/templates/versions/refresh": {
+      post: {
+        tags: ["Templates"],
+        summary: "Refresh versions for all templates",
+        responses: {
+          "200": {
+            description: "Refresh results",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    enabled: { type: "boolean" },
+                    updated: { type: "boolean" },
+                    services: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/ServiceCatalogItem" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/templates/{serviceId}/versions/refresh": {
+      post: {
+        tags: ["Templates"],
+        summary: "Refresh versions for one template",
+        parameters: [
+          { name: "serviceId", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          "200": {
+            description: "Refresh results",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    enabled: { type: "boolean" },
+                    updated: { type: "boolean" },
+                    service: { $ref: "#/components/schemas/ServiceCatalogItem" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     "/api/catalog": {
       get: {
         tags: ["Catalog"],

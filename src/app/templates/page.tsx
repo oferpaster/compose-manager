@@ -8,6 +8,9 @@ export default function TemplatesPage() {
   const [services, setServices] = useState<ServiceCatalogItem[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
+  const [versionsEnabled, setVersionsEnabled] = useState(false);
+  const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const [isRefreshingAll, setIsRefreshingAll] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -17,6 +20,16 @@ export default function TemplatesPage() {
     }
 
     load().catch(() => null);
+  }, []);
+
+  useEffect(() => {
+    async function loadStatus() {
+      const response = await fetch("/api/templates/versions/status");
+      const data = (await response.json()) as { enabled: boolean };
+      setVersionsEnabled(Boolean(data.enabled));
+    }
+
+    loadStatus().catch(() => null);
   }, []);
 
   const removeService = (index: number) => {
@@ -46,6 +59,64 @@ export default function TemplatesPage() {
     }
   };
 
+  const refreshVersions = async (serviceId: string) => {
+    if (!versionsEnabled) return;
+    setRefreshingId(serviceId);
+    setSaveMessage("");
+    try {
+      const response = await fetch(`/api/templates/${serviceId}/versions/refresh`, {
+        method: "POST",
+      });
+      const data = (await response.json()) as {
+        enabled: boolean;
+        updated: boolean;
+        service: ServiceCatalogItem | null;
+      };
+      if (!data.enabled) {
+        setSaveMessage("Registry not configured");
+        return;
+      }
+      if (data.service) {
+        setServices((prev) =>
+          prev.map((item) => (item.id === data.service?.id ? data.service : item))
+        );
+        setSaveMessage(data.updated ? "Versions updated" : "No new versions");
+      }
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : "Failed to refresh");
+    } finally {
+      setRefreshingId(null);
+      setTimeout(() => setSaveMessage(""), 2500);
+    }
+  };
+
+  const refreshAllVersions = async () => {
+    if (!versionsEnabled) return;
+    setIsRefreshingAll(true);
+    setSaveMessage("");
+    try {
+      const response = await fetch("/api/templates/versions/refresh", {
+        method: "POST",
+      });
+      const data = (await response.json()) as {
+        enabled: boolean;
+        updated: boolean;
+        services: ServiceCatalogItem[];
+      };
+      if (!data.enabled) {
+        setSaveMessage("Registry not configured");
+        return;
+      }
+      setServices(data.services || []);
+      setSaveMessage(data.updated ? "Versions updated" : "No new versions");
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : "Failed to refresh");
+    } finally {
+      setIsRefreshingAll(false);
+      setTimeout(() => setSaveMessage(""), 2500);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-12">
       <div className="mx-auto w-full max-w-6xl space-y-6">
@@ -71,6 +142,22 @@ export default function TemplatesPage() {
             >
               Bulk import
             </Link>
+            <span
+              className="inline-flex"
+              title={
+                versionsEnabled
+                  ? "Refresh versions for all templates"
+                  : "Configure registry credentials to enable version refresh"
+              }
+            >
+              <button
+                onClick={refreshAllVersions}
+                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600"
+                disabled={!versionsEnabled || isRefreshingAll}
+              >
+                {isRefreshingAll ? "Refreshing..." : "Refresh all versions"}
+              </button>
+            </span>
             <Link
               href="/templates/new"
               className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
@@ -109,6 +196,24 @@ export default function TemplatesPage() {
                   >
                     Edit
                   </Link>
+                  <span
+                    className="inline-flex"
+                    title={
+                      versionsEnabled
+                        ? "Refresh versions"
+                        : "Configure registry credentials to enable version refresh"
+                    }
+                  >
+                    <button
+                      onClick={() => refreshVersions(service.id)}
+                      className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-600"
+                      disabled={!versionsEnabled || refreshingId === service.id}
+                    >
+                      {refreshingId === service.id
+                        ? "Refreshing..."
+                        : "Refresh versions"}
+                    </button>
+                  </span>
                   <button
                     onClick={() => removeService(index)}
                     className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-600"

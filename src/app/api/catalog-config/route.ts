@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { loadCatalog, saveCatalog } from "@/lib/catalogStore";
 import { ServiceCatalogItem } from "@/lib/serviceCatalog";
+import { ensureVersionScheduler } from "@/lib/versionScheduler";
+
+ensureVersionScheduler();
 
 export async function GET() {
   return NextResponse.json({ services: loadCatalog() });

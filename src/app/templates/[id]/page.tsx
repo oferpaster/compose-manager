@@ -46,10 +46,12 @@ export default function TemplateEditorPage() {
   const router = useRouter();
   const [services, setServices] = useState<ServiceCatalogItem[]>([]);
   const [service, setService] = useState<ServiceCatalogItem>(emptyService());
-  const [versionsDraft, setVersionsDraft] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [networks, setNetworks] = useState<string[]>([]);
+  const [versionsEnabled, setVersionsEnabled] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [newVersion, setNewVersion] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -71,10 +73,6 @@ export default function TemplateEditorPage() {
   }, [params.id]);
 
   useEffect(() => {
-    setVersionsDraft(service.versions.join("\n"));
-  }, [service.id, service.versions]);
-
-  useEffect(() => {
     async function loadNetworks() {
       const response = await fetch("/api/networks");
       const data = (await response.json()) as { networks: { name: string }[] };
@@ -82,6 +80,16 @@ export default function TemplateEditorPage() {
     }
 
     loadNetworks().catch(() => null);
+  }, []);
+
+  useEffect(() => {
+    async function loadStatus() {
+      const response = await fetch("/api/templates/versions/status");
+      const data = (await response.json()) as { enabled: boolean };
+      setVersionsEnabled(Boolean(data.enabled));
+    }
+
+    loadStatus().catch(() => null);
   }, []);
 
   const envText = useMemo(
@@ -100,12 +108,6 @@ export default function TemplateEditorPage() {
     [services]
   );
 
-  const parseVersionsText = (text: string) =>
-    text
-      .split("\n")
-      .map((item) => item.trim())
-      .filter(Boolean);
-
   const handleSave = async () => {
     if (!service.id.trim()) {
       setSaveMessage("Service ID is required");
@@ -117,7 +119,7 @@ export default function TemplateEditorPage() {
 
     const nextService = {
       ...service,
-      versions: parseVersionsText(versionsDraft),
+      versions: service.versions || [],
     };
 
     const nextServices = [...services];
@@ -146,6 +148,36 @@ export default function TemplateEditorPage() {
       setSaveMessage(error instanceof Error ? error.message : "Failed to save");
     } finally {
       setIsSaving(false);
+      setTimeout(() => setSaveMessage(""), 2500);
+    }
+  };
+
+  const refreshVersions = async () => {
+    if (!versionsEnabled || !service.id) return;
+    setIsRefreshing(true);
+    setSaveMessage("");
+    try {
+      const response = await fetch(
+        `/api/templates/${service.id}/versions/refresh`,
+        { method: "POST" }
+      );
+      const data = (await response.json()) as {
+        enabled: boolean;
+        updated: boolean;
+        service: ServiceCatalogItem | null;
+      };
+      if (!data.enabled) {
+        setSaveMessage("Registry not configured");
+        return;
+      }
+      if (data.service) {
+        setService(data.service);
+        setSaveMessage(data.updated ? "Versions updated" : "No new versions");
+      }
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : "Failed to refresh");
+    } finally {
+      setIsRefreshing(false);
       setTimeout(() => setSaveMessage(""), 2500);
     }
   };
@@ -233,21 +265,95 @@ export default function TemplateEditorPage() {
                 placeholder="ghcr.io/example/inventory-service"
               />
             </label>
-            <label className="text-sm text-slate-600">
-              Versions (one per line)
-              <textarea
-                className="mt-2 min-h-[120px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                value={versionsDraft}
-                onChange={(event) => setVersionsDraft(event.target.value)}
-                onBlur={() =>
-                  setService({
-                    ...service,
-                    versions: parseVersionsText(versionsDraft),
-                  })
-                }
-                placeholder="1.0.0"
-              />
-            </label>
+            <div className="space-y-3 md:col-span-1">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">Versions</p>
+                  <p className="text-xs text-slate-500">
+                    {versionsEnabled
+                      ? "Managed by the registry."
+                      : "Add versions manually."}
+                  </p>
+                </div>
+                {versionsEnabled ? (
+                  <button
+                    type="button"
+                    onClick={refreshVersions}
+                    className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-600"
+                    disabled={!versionsEnabled || isRefreshing}
+                    title={
+                      versionsEnabled
+                        ? "Sync versions from registry"
+                        : "Configure registry credentials to enable version refresh"
+                    }
+                  >
+                    {isRefreshing ? "Syncing..." : "Sync versions"}
+                  </button>
+                ) : null}
+              </div>
+              <div className="max-h-24 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                {(service.versions || []).length === 0 ? (
+                  <p className="text-xs text-slate-500">No versions added.</p>
+                ) : (
+                  <ul className="divide-y divide-slate-200">
+                    {(service.versions || []).map((version) => (
+                      <li
+                        key={version}
+                        className="flex items-center justify-between py-1 text-xs text-slate-700"
+                      >
+                        <span>{version}</span>
+                        {!versionsEnabled ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setService({
+                                ...service,
+                                versions: (service.versions || []).filter(
+                                  (item) => item !== version
+                                ),
+                              })
+                            }
+                            className="rounded-lg border border-slate-200 px-2 py-0.5 text-[11px] text-slate-600"
+                          >
+                            Remove
+                          </button>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              {!versionsEnabled ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    className="min-w-[200px] flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                    value={newVersion}
+                    onChange={(event) => setNewVersion(event.target.value)}
+                    placeholder="1.0.0"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const trimmed = newVersion.trim();
+                      if (!trimmed) return;
+                      const versions = service.versions || [];
+                      if (versions.includes(trimmed)) {
+                        setNewVersion("");
+                        return;
+                      }
+                      setService({
+                        ...service,
+                        versions: [...versions, trimmed],
+                      });
+                      setNewVersion("");
+                    }}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600"
+                  >
+                    Add version
+                  </button>
+                </div>
+              ) : null}
+            </div>
             <label className="text-sm text-slate-600">
               Default container name
               <input

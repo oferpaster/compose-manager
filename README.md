@@ -11,6 +11,7 @@ ComposeBuilder is a Next.js app for building Docker Compose files from templates
 - Bulk import templates from existing docker-compose.yml
 - Spring Boot application.properties templates with inline editing and mounted volumes
 - Settings for default networks (driver support)
+- Automatic version refresh for service templates (daily + manual refresh when registry is configured)
 - Scripts manager (inline scripts and export selection)
 - Utilities manager (file upload + export selection)
 - Export compose bundles as ZIP with selectable sections
