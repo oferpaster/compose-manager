@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import ServiceInstanceEditor from "@/components/ServiceInstanceEditor";
 import {
@@ -91,16 +91,23 @@ export default function EditServiceGroupPage() {
     loadCompose().catch(() => setError("Failed to load compose"));
   }, [params.id, params.groupId, isPlayground]);
 
-  const loadTemplate = async (serviceId: string) => {
-    if (templateCache[serviceId]) return templateCache[serviceId];
+  const loadTemplate = useCallback(
+    async (serviceId: string) => {
+      if (serviceId in templateCache) return templateCache[serviceId];
 
-    const response = await fetch(`/api/templates/${serviceId}`);
-    if (!response.ok) return "";
-    const data = (await response.json()) as { template: string };
+      const response = await fetch(`/api/templates/${serviceId}`);
+      if (!response.ok) {
+        setTemplateCache((prev) => ({ ...prev, [serviceId]: "" }));
+        return "";
+      }
+      const data = (await response.json()) as { template: string };
+      const template = data.template ?? "";
 
-    setTemplateCache((prev) => ({ ...prev, [serviceId]: data.template }));
-    return data.template;
-  };
+      setTemplateCache((prev) => ({ ...prev, [serviceId]: template }));
+      return template;
+    },
+    [templateCache]
+  );
 
   const updateInstance = (id: string, next: ServiceConfig) => {
     setInstances((prev) => prev.map((item) => (item.id === id ? next : item)));

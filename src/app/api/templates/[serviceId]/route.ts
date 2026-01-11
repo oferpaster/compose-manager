@@ -9,12 +9,28 @@ export async function GET(
 ) {
   const { serviceId } = await params;
   const service = findServiceById(serviceId);
-  if (!service?.propertiesTemplateFile && service?.applicationPropertiesTemplate) {
-    return NextResponse.json({ template: service.applicationPropertiesTemplate });
+  if (
+    !service?.propertiesTemplateFile &&
+    service?.applicationPropertiesTemplate
+  ) {
+    return NextResponse.json({
+      template: service.applicationPropertiesTemplate,
+    });
   }
 
   if (!service?.propertiesTemplateFile) {
-    return NextResponse.json({ template: "" }, { status: 404 });
+    const fallbackPath = path.join(
+      process.cwd(),
+      "data",
+      "service-templates",
+      serviceId,
+      "application.properties"
+    );
+    if (fs.existsSync(fallbackPath)) {
+      const template = fs.readFileSync(fallbackPath, "utf8");
+      return NextResponse.json({ template });
+    }
+    return NextResponse.json({ template: "" });
   }
 
   if (service.applicationPropertiesTemplate) {
@@ -23,7 +39,7 @@ export async function GET(
 
   const templatePath = path.join(process.cwd(), service.propertiesTemplateFile);
   if (!fs.existsSync(templatePath)) {
-    return NextResponse.json({ template: "" }, { status: 404 });
+    return NextResponse.json({ template: "" });
   }
 
   const template = fs.readFileSync(templatePath, "utf8");

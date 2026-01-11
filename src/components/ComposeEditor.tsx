@@ -1544,7 +1544,7 @@ export default function ComposeEditor({
                       service.id === event.target.value
                   );
                   setSelectedService(matched || null);
-                  setSelectedVersion("");
+                  setSelectedVersion(matched?.versions[0] || "");
                 }}
               />
               <datalist id="services">
