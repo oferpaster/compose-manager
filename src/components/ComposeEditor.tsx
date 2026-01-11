@@ -77,8 +77,10 @@ export default function ComposeEditor({
   mode = "full",
 }: Props) {
   const router = useRouter();
+  const PLAYGROUND_STORAGE_KEY = "composebuilder.playground";
   const isPlayground = mode === "playground";
   const [config, setConfig] = useState<ComposeConfig>(initialConfig);
+  const [playgroundLoaded, setPlaygroundLoaded] = useState(false);
   const [catalog, setCatalog] = useState<CatalogResponse>({
     services: [],
     networks: [],
@@ -116,8 +118,28 @@ export default function ComposeEditor({
   const [missingEnvValues, setMissingEnvValues] = useState<Record<string, string>>({});
 
   useEffect(() => {
+    if (isPlayground) return;
     setConfig(normalizeComposeConfig(initialConfig));
-  }, [initialConfig]);
+  }, [initialConfig, isPlayground]);
+
+  useEffect(() => {
+    if (!isPlayground) return;
+    const stored = localStorage.getItem(PLAYGROUND_STORAGE_KEY);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as ComposeConfig;
+        setConfig(normalizeComposeConfig(parsed));
+      } catch {
+        // ignore invalid storage
+      }
+    }
+    setPlaygroundLoaded(true);
+  }, [isPlayground]);
+
+  useEffect(() => {
+    if (!isPlayground || !playgroundLoaded) return;
+    localStorage.setItem(PLAYGROUND_STORAGE_KEY, JSON.stringify(config));
+  }, [config, isPlayground, playgroundLoaded]);
 
   useEffect(() => {
     async function loadCatalog() {
@@ -751,6 +773,11 @@ export default function ComposeEditor({
     );
   };
 
+  const storePlaygroundState = () => {
+    if (!isPlayground) return;
+    localStorage.setItem(PLAYGROUND_STORAGE_KEY, JSON.stringify(config));
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     setSaveMessage("");
@@ -838,6 +865,17 @@ export default function ComposeEditor({
               >
                 ← Back
               </a>
+              {isPlayground ? (
+                <button
+                  onClick={() => {
+                    localStorage.removeItem(PLAYGROUND_STORAGE_KEY);
+                    window.location.reload();
+                  }}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600"
+                >
+                  Reset
+                </button>
+              ) : null}
               <button
                 onClick={() => setIsValidationOpen(true)}
                 className="cursor-pointer rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-amber-700"
@@ -1610,18 +1648,17 @@ export default function ComposeEditor({
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {!isPlayground ? (
-                          <button
-                            onClick={() =>
-                              router.push(
-                                `/compose/${config.id}/service/${group.groupId}`
-                              )
-                            }
-                            className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-600"
-                          >
-                            Edit
-                          </button>
-                        ) : null}
+                        <button
+                          onClick={() => {
+                            storePlaygroundState();
+                            router.push(
+                              `/compose/${config.id}/service/${group.groupId}`
+                            );
+                          }}
+                          className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-600"
+                        >
+                          Edit
+                        </button>
                         <button
                           onClick={() => removeGroup(group.groupId)}
                           className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-600"

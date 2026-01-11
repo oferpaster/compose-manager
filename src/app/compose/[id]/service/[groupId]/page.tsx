@@ -18,6 +18,8 @@ type CatalogResponse = {
 export default function EditServiceGroupPage() {
   const params = useParams<{ id: string; groupId: string }>();
   const router = useRouter();
+  const PLAYGROUND_STORAGE_KEY = "composebuilder.playground";
+  const isPlayground = params.id === "playground";
   const [compose, setCompose] = useState<ComposeConfig | null>(null);
   const [instances, setInstances] = useState<ServiceConfig[]>([]);
   const [catalog, setCatalog] = useState<CatalogResponse>({
@@ -43,6 +45,30 @@ export default function EditServiceGroupPage() {
 
   useEffect(() => {
     async function loadCompose() {
+      if (isPlayground) {
+        const stored = localStorage.getItem(PLAYGROUND_STORAGE_KEY);
+        if (!stored) {
+          setError("Playground is empty");
+          return;
+        }
+        try {
+          const parsed = JSON.parse(stored) as ComposeConfig;
+          const normalized = normalizeComposeConfig(parsed);
+          setCompose(normalized);
+          const groupInstances = normalized.services.filter(
+            (service) => service.groupId === params.groupId
+          );
+          if (groupInstances.length === 0) {
+            setError("Service group not found");
+            return;
+          }
+          setInstances(groupInstances);
+          setSelectedId(groupInstances[0]?.id || null);
+        } catch {
+          setError("Playground data is invalid");
+        }
+        return;
+      }
       const response = await fetch(`/api/composes/${params.id}`);
       if (!response.ok) {
         setError("Compose not found");
@@ -63,7 +89,7 @@ export default function EditServiceGroupPage() {
     }
 
     loadCompose().catch(() => setError("Failed to load compose"));
-  }, [params.id, params.groupId]);
+  }, [params.id, params.groupId, isPlayground]);
 
   const loadTemplate = async (serviceId: string) => {
     if (templateCache[serviceId]) return templateCache[serviceId];
@@ -169,6 +195,15 @@ export default function EditServiceGroupPage() {
         services: cleanedServices,
       };
 
+      if (isPlayground) {
+        localStorage.setItem(
+          PLAYGROUND_STORAGE_KEY,
+          JSON.stringify(nextConfig)
+        );
+        router.push("/playground");
+        return;
+      }
+
       const response = await fetch(`/api/composes/${params.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -223,7 +258,9 @@ export default function EditServiceGroupPage() {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => router.push(`/compose/${params.id}`)}
+              onClick={() =>
+                router.push(isPlayground ? "/playground" : `/compose/${params.id}`)
+              }
               className="rounded-full border border-slate-200 px-5 py-2 text-sm text-slate-600"
             >
               <span className="mr-2 inline-flex h-4 w-4 items-center justify-center">
