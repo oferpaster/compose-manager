@@ -190,6 +190,18 @@ const openApiSpec = {
           description: { type: "string" },
           usage: { type: "string" },
           content: { type: "string" },
+          created_at: { type: "string" },
+          updated_at: { type: "string" },
+        },
+      },
+      ScriptListItem: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+          file_name: { type: "string" },
+          description: { type: "string" },
+          usage: { type: "string" },
           updated_at: { type: "string" },
         },
       },
@@ -201,6 +213,39 @@ const openApiSpec = {
           file_name: { type: "string" },
           file_path: { type: "string" },
           created_at: { type: "string" },
+          updated_at: { type: "string" },
+        },
+      },
+      UtilityDetail: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+          file_name: { type: "string" },
+          file_path: { type: "string" },
+        },
+      },
+      UtilityListItem: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+          file_name: { type: "string" },
+          updated_at: { type: "string" },
+        },
+      },
+      ProjectSummary: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+        },
+      },
+      ComposeSummary: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
           updated_at: { type: "string" },
         },
       },
@@ -324,10 +369,10 @@ const openApiSpec = {
                 schema: {
                   type: "object",
                   properties: {
-                    project: { $ref: "#/components/schemas/Project" },
+                    project: { $ref: "#/components/schemas/ProjectSummary" },
                     composes: {
                       type: "array",
-                      items: { $ref: "#/components/schemas/ComposeRow" },
+                      items: { $ref: "#/components/schemas/ComposeSummary" },
                     },
                     capabilities: {
                       $ref: "#/components/schemas/ProjectCapabilities",
@@ -764,7 +809,10 @@ const openApiSpec = {
                   properties: {
                     enabled: { type: "boolean" },
                     updated: { type: "boolean" },
-                    service: { $ref: "#/components/schemas/ServiceCatalogItem" },
+                    service: {
+                      $ref: "#/components/schemas/ServiceCatalogItem",
+                      nullable: true,
+                    },
                   },
                 },
               },
@@ -903,7 +951,10 @@ const openApiSpec = {
                 schema: {
                   type: "object",
                   properties: {
-                    scripts: { type: "array", items: { $ref: "#/components/schemas/Script" } },
+                    scripts: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/ScriptListItem" },
+                    },
                   },
                 },
               },
@@ -1003,7 +1054,7 @@ const openApiSpec = {
                   properties: {
                     utilities: {
                       type: "array",
-                      items: { $ref: "#/components/schemas/Utility" },
+                      items: { $ref: "#/components/schemas/UtilityListItem" },
                     },
                   },
                 },
@@ -1047,7 +1098,7 @@ const openApiSpec = {
               "application/json": {
                 schema: {
                   type: "object",
-                  properties: { utility: { $ref: "#/components/schemas/Utility" } },
+                  properties: { utility: { $ref: "#/components/schemas/UtilityDetail" } },
                 },
               },
             },
