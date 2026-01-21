@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 import { PassThrough } from "stream";
 import { ComposeConfig, generatePrometheusYaml } from "./compose";
-import { loadCatalog } from "./catalogStore";
+import { findServiceById, loadCatalog } from "./catalogStore";
 import { saveComposeAssets } from "./storage";
 import { getDb } from "./db";
 
@@ -81,23 +81,49 @@ async function appendComposeEntries(
   }
 
   if (options.includeConfigs) {
-    const servicesDir = composeDir;
-    if (fs.existsSync(servicesDir)) {
-      const entries = fs.readdirSync(servicesDir, { withFileTypes: true });
-      entries.forEach((entry) => {
-        if (!entry.isDirectory()) return;
-        if (entry.name === "node_modules") return;
-        if (entry.name.startsWith(".")) return;
-        if (entry.name === "services") return;
-        if (entry.name === "..") return;
-        if (entry.name === ".env" || entry.name === "docker-compose.yml") return;
-        const folderPath = path.join(servicesDir, entry.name);
-        const propsPath = path.join(folderPath, "application.properties");
-        if (fs.existsSync(propsPath)) {
-          archive.file(propsPath, { name: `${entry.name}/application.properties` });
+    const seenPropsTargets = new Set<string>();
+    const resolvePropsFolder = (volumes: string[]) => {
+      const match = volumes.find(
+        (volume) =>
+          typeof volume === "string" && volume.includes("application.properties")
+      );
+      if (!match || !match.includes(":")) return "";
+      const raw = match.split(":")[0].trim().replace(/^['"]|['"]$/g, "");
+      const normalized = raw.startsWith("./") ? raw.slice(2) : raw;
+      const dirName = path.posix.basename(path.posix.dirname(normalized));
+      if (!dirName || dirName === "." || dirName === "/") return "";
+      return dirName;
+    };
+
+    config.services.forEach((service) => {
+      const volumeFolder = resolvePropsFolder(service.volumes);
+      const folderName = volumeFolder || service.name || service.serviceId;
+      if (!folderName) return;
+
+      let content = service.applicationProperties?.trim() || "";
+      if (!content) {
+        const templateService = findServiceById(service.serviceId);
+        if (templateService?.applicationPropertiesTemplate?.trim()) {
+          content = templateService.applicationPropertiesTemplate.trim();
         }
-      });
-    }
+      }
+      if (!content) {
+        const fallbackPath = path.join(
+          composeDir,
+          service.name || service.serviceId,
+          "application.properties"
+        );
+        if (fs.existsSync(fallbackPath)) {
+          content = fs.readFileSync(fallbackPath, "utf8").trim();
+        }
+      }
+
+      if (!content) return;
+      const target = `${folderName}/application.properties`;
+      if (seenPropsTargets.has(target)) return;
+      seenPropsTargets.add(target);
+      archive.append(content, { name: target });
+    });
   }
 
   if (options.includeScripts) {
