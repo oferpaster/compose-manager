@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { DataSet, Network } from "vis-network/standalone";
 import {
   ComposeConfig,
   createServiceConfig,
@@ -98,6 +99,14 @@ export default function ComposeEditor({
   const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null);
   const [scrollTarget, setScrollTarget] = useState<number | null>(null);
   const composeScrollRef = useRef<HTMLPreElement | null>(null);
+  const dependencyNetworkRef = useRef<HTMLDivElement | null>(null);
+  const dependencyNetworkInstance = useRef<Network | null>(null);
+  const dependencyNodesRef = useRef<DataSet<{
+    id: string;
+    label: string;
+    color?: unknown;
+    font?: unknown;
+  }> | null>(null);
   const [isEnvEditorOpen, setIsEnvEditorOpen] = useState(false);
   const [envDraft, setEnvDraft] = useState("");
   const [isYamlEditorOpen, setIsYamlEditorOpen] = useState(false);
@@ -105,6 +114,7 @@ export default function ComposeEditor({
   const [yamlError, setYamlError] = useState("");
   const [isPortsOverviewOpen, setIsPortsOverviewOpen] = useState(false);
   const [isVolumesOverviewOpen, setIsVolumesOverviewOpen] = useState(false);
+  const [isDependencyMapOpen, setIsDependencyMapOpen] = useState(false);
   const [serviceSearch, setServiceSearch] = useState("");
   const [prometheusDraft, setPrometheusDraft] = useState("");
   const [prometheusDraftDirty, setPrometheusDraftDirty] = useState(false);
@@ -114,7 +124,16 @@ export default function ComposeEditor({
   const [unusedEnvSearch, setUnusedEnvSearch] = useState("");
   const [copiedCompose, setCopiedCompose] = useState(false);
   const [copiedEnv, setCopiedEnv] = useState(false);
-  const [missingEnvValues, setMissingEnvValues] = useState<Record<string, string>>({});
+  const [missingEnvValues, setMissingEnvValues] = useState<
+    Record<string, string>
+  >({});
+  const [dependencyServiceName, setDependencyServiceName] = useState("");
+  const [dependencyView, setDependencyView] = useState<"hierarchical" | "free">(
+    "hierarchical",
+  );
+  const [showAllDependencyEdges, setShowAllDependencyEdges] = useState(true);
+  const [dependedOnOpen, setDependedOnOpen] = useState(false);
+  const [isDarkTheme, setIsDarkTheme] = useState(false);
 
   useEffect(() => {
     if (isPlayground) return;
@@ -139,6 +158,32 @@ export default function ComposeEditor({
     if (!isPlayground || !playgroundLoaded) return;
     localStorage.setItem(PLAYGROUND_STORAGE_KEY, JSON.stringify(config));
   }, [config, isPlayground, playgroundLoaded]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const readTheme = () => {
+      const theme = document.documentElement.dataset.theme;
+      if (theme === "dark") return true;
+      if (theme === "light") return false;
+      return window.matchMedia?.("(prefers-color-scheme: dark)").matches || false;
+    };
+
+    setIsDarkTheme(readTheme());
+    const observer = new MutationObserver(() => {
+      setIsDarkTheme(readTheme());
+    });
+    observer.observe(document.documentElement, { attributes: true });
+
+    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
+    const handleMedia = () => setIsDarkTheme(readTheme());
+    media?.addEventListener?.("change", handleMedia);
+
+    return () => {
+      observer.disconnect();
+      media?.removeEventListener?.("change", handleMedia);
+    };
+  }, []);
 
   useEffect(() => {
     async function loadCatalog() {
@@ -180,8 +225,237 @@ export default function ComposeEditor({
 
   const groupedServices = useMemo<ServiceGroup[]>(
     () => buildGroups(config.services),
-    [config.services]
+    [config.services],
   );
+
+  const dependencyServiceNames = useMemo(() => {
+    const seen = new Set<string>();
+    const names: string[] = [];
+    config.services.forEach((service) => {
+      if (!service.name || seen.has(service.name)) return;
+      seen.add(service.name);
+      names.push(service.name);
+    });
+    return names;
+  }, [config.services]);
+
+  useEffect(() => {
+    if (!dependencyServiceNames.length) {
+      setDependencyServiceName("");
+      return;
+    }
+    if (!dependencyServiceName) {
+      setDependencyServiceName(dependencyServiceNames[0]);
+      return;
+    }
+    if (!dependencyServiceNames.includes(dependencyServiceName)) {
+      setDependencyServiceName(dependencyServiceNames[0]);
+    }
+  }, [dependencyServiceNames, dependencyServiceName]);
+
+  const dependencyEdges = useMemo(
+    () =>
+      config.services.flatMap((service) =>
+        service.dependsOn
+          .filter((entry) => entry.name)
+          .map((entry) => ({
+            from: service.name,
+            to: entry.name,
+            condition: entry.condition || "",
+          })),
+      ),
+    [config.services],
+  );
+
+  const filteredDependencyEdges = useMemo(() => {
+    if (showAllDependencyEdges || !dependencyServiceName) return dependencyEdges;
+    return dependencyEdges.filter(
+      (edge) =>
+        edge.from === dependencyServiceName ||
+        edge.to === dependencyServiceName,
+    );
+  }, [dependencyEdges, showAllDependencyEdges, dependencyServiceName]);
+
+  const focusNodeNames = useMemo(() => {
+    if (showAllDependencyEdges || !dependencyServiceName) {
+      return dependencyServiceNames;
+    }
+    const names = new Set<string>([dependencyServiceName]);
+    filteredDependencyEdges.forEach((edge) => {
+      names.add(edge.from);
+      names.add(edge.to);
+    });
+    return dependencyServiceNames.filter((name) => names.has(name));
+  }, [
+    dependencyServiceNames,
+    dependencyServiceName,
+    filteredDependencyEdges,
+    showAllDependencyEdges,
+  ]);
+
+  const updateDependenciesForService = (
+    serviceName: string,
+    nextDependsOn: ServiceConfig["dependsOn"],
+  ) => {
+    setConfig((prev) => ({
+      ...prev,
+      services: prev.services.map((service) =>
+        service.name === serviceName
+          ? {
+              ...service,
+              dependsOn: nextDependsOn,
+            }
+          : service,
+      ),
+    }));
+  };
+
+  useEffect(() => {
+    if (!isDependencyMapOpen) {
+      dependencyNetworkInstance.current?.destroy();
+      dependencyNetworkInstance.current = null;
+      dependencyNodesRef.current = null;
+      return;
+    }
+    if (!dependencyNetworkRef.current) return;
+
+    const nodes = new DataSet(
+      focusNodeNames.map((name) => ({
+        id: name,
+        label: name,
+      })),
+    );
+    dependencyNodesRef.current = nodes;
+    const edges = new DataSet(
+      filteredDependencyEdges.map((edge) => ({
+        id: `${edge.from}->${edge.to}`,
+        from: edge.from,
+        to: edge.to,
+        arrows: "to",
+        label: edge.condition || "",
+      })),
+    );
+
+    const isHierarchical = dependencyView === "hierarchical";
+    const labelColor = isDarkTheme ? "#f8fafc" : "#0f172a";
+    const edgeLabelColor = isDarkTheme ? "#e2e8f0" : "#475569";
+    const selectedNodeFill = isDarkTheme ? "#334155" : "#0f172a";
+    const selectedNodeStroke = isDarkTheme ? "#475569" : "#0f172a";
+    const options: Record<string, unknown> = {
+      autoResize: true,
+        physics: {
+          enabled: !isHierarchical,
+          stabilization: false,
+          barnesHut: {
+            gravitationalConstant: -5200,
+            springLength: 90,
+            springConstant: 0.05,
+            centralGravity: 0.7,
+          },
+        },
+      nodes: {
+        shape: "dot",
+        size: 12,
+        color: {
+          background: "#94a3b8",
+          border: "#64748b",
+          highlight: {
+            background: selectedNodeFill,
+            border: selectedNodeStroke,
+          },
+        },
+        font: { color: labelColor, size: 14, face: "ui-sans-serif" },
+        scaling: {
+          label: {
+            enabled: true,
+            min: 14,
+            max: 14,
+          },
+        },
+      },
+      edges: {
+        color: { color: "#94a3b8" },
+        font: { color: edgeLabelColor, size: 10, align: "middle" },
+        arrows: { to: { enabled: true, scaleFactor: 0.7 } },
+        smooth: isHierarchical
+          ? { enabled: true, type: "cubicBezier" }
+          : { enabled: true, type: "dynamic" },
+      },
+        interaction: { hover: true },
+        configure: false,
+      };
+    if (isHierarchical) {
+      options.layout = {
+        hierarchical: {
+          enabled: true,
+          direction: "LR",
+          sortMethod: "directed",
+          nodeSpacing: 90,
+          levelSeparation: 140,
+        },
+      };
+    }
+
+    const network = new Network(
+      dependencyNetworkRef.current,
+      { nodes, edges },
+      options,
+    );
+    dependencyNetworkInstance.current = network;
+    network.on("selectNode", (params) => {
+      const id = params.nodes[0];
+      if (typeof id === "string") {
+        setDependencyServiceName(id);
+      }
+    });
+    network.fit({
+      animation: { duration: 300, easingFunction: "easeInOutQuad" },
+    });
+    if (!isHierarchical) {
+      setTimeout(() => {
+        network.fit({
+          animation: { duration: 300, easingFunction: "easeInOutQuad" },
+        });
+      }, 500);
+    }
+
+    return () => {
+      network.destroy();
+    };
+  }, [
+    isDependencyMapOpen,
+    focusNodeNames,
+    filteredDependencyEdges,
+    dependencyView,
+  ]);
+
+  useEffect(() => {
+    if (!dependencyNodesRef.current) return;
+    const nodes = dependencyNodesRef.current;
+    focusNodeNames.forEach((name) => {
+      const isSelected = name === dependencyServiceName;
+      nodes.update({
+        id: name,
+        color: {
+          background: isSelected
+            ? isDarkTheme
+              ? "#334155"
+              : "#0f172a"
+            : "#94a3b8",
+          border: isSelected
+            ? isDarkTheme
+              ? "#475569"
+              : "#0f172a"
+            : "#64748b",
+        },
+        font: {
+          color: isDarkTheme ? "#f8fafc" : "#0f172a",
+          size: 14,
+          face: "ui-sans-serif",
+        },
+      });
+    });
+  }, [dependencyServiceName, focusNodeNames, isDarkTheme]);
   const filteredGroups = useMemo(() => {
     const query = serviceSearch.trim().toLowerCase();
     if (!query) return groupedServices;
@@ -199,7 +473,7 @@ export default function ComposeEditor({
 
   const composeYaml = useMemo(
     () => generateComposeYaml(config, catalog.services, catalog.networks),
-    [config, catalog.services, catalog.networks]
+    [config, catalog.services, catalog.networks],
   );
   const prometheusYaml = useMemo(() => {
     if (config.prometheus?.configYaml?.trim()) {
@@ -228,16 +502,12 @@ export default function ComposeEditor({
 
   const validationComposeYaml = useMemo(
     () =>
-      generateComposeYaml(
-        validationConfig,
-        catalog.services,
-        catalog.networks
-      ),
-    [validationConfig, catalog.services, catalog.networks]
+      generateComposeYaml(validationConfig, catalog.services, catalog.networks),
+    [validationConfig, catalog.services, catalog.networks],
   );
   const validationEnvFile = useMemo(
     () => generateEnvFile(validationConfig),
-    [validationConfig]
+    [validationConfig],
   );
 
   const validation = useMemo(() => {
@@ -274,10 +544,10 @@ export default function ComposeEditor({
 
     const definedAll = new Set<string>([...definedGlobal, ...definedService]);
     const missing = Array.from(referenced).filter(
-      (key) => !definedAll.has(key)
+      (key) => !definedAll.has(key),
     );
     const unused = Array.from(definedGlobal).filter(
-      (key) => !referenced.has(key)
+      (key) => !referenced.has(key),
     );
     missing.sort();
     unused.sort();
@@ -310,12 +580,12 @@ export default function ComposeEditor({
   const highlightLines = useMemo(() => {
     if (!hoveredGroupId) return new Set<number>();
     const group = groupedServices.find(
-      (item) => item.groupId === hoveredGroupId
+      (item) => item.groupId === hoveredGroupId,
     );
     if (!group) return new Set<number>();
 
     const targetNames = new Set(
-      group.instances.map((instance) => instance.name)
+      group.instances.map((instance) => instance.name),
     );
     const lines = composeYaml.split("\n");
     const highlighted = new Set<number>();
@@ -390,7 +660,7 @@ export default function ComposeEditor({
   const handleSortByGroup = () => {
     setConfig((prev) => {
       const nextServices = groupedServices.flatMap((group) =>
-        [...group.instances].sort((a, b) => a.name.localeCompare(b.name))
+        [...group.instances].sort((a, b) => a.name.localeCompare(b.name)),
       );
       return { ...prev, services: nextServices };
     });
@@ -424,7 +694,7 @@ export default function ComposeEditor({
   useEffect(() => {
     if (!config.prometheus?.enabled) {
       const anyServiceEnabled = config.services.some(
-        (service) => service.prometheusEnabled
+        (service) => service.prometheusEnabled,
       );
       if (anyServiceEnabled) {
         setConfig((prev) => ({
@@ -479,11 +749,11 @@ export default function ComposeEditor({
     }
 
     const group = groupedServices.find(
-      (item) => item.groupId === hoveredGroupId
+      (item) => item.groupId === hoveredGroupId,
     );
     if (!group) return;
     const targetNames = new Set(
-      group.instances.map((instance) => instance.name)
+      group.instances.map((instance) => instance.name),
     );
     const lines = composeYaml.split("\n");
     const getIndent = (line: string) => line.match(/^ */)?.[0].length ?? 0;
@@ -540,7 +810,7 @@ export default function ComposeEditor({
     const container = composeScrollRef.current;
     if (!container) return;
     const target = container.querySelector(
-      `[data-line-index="${scrollTarget}"]`
+      `[data-line-index="${scrollTarget}"]`,
     ) as HTMLElement | null;
     if (!target) return;
     const containerRect = container.getBoundingClientRect();
@@ -567,7 +837,7 @@ export default function ComposeEditor({
     setConfig((prev) => ({
       ...prev,
       globalEnv: prev.globalEnv.map((entry, idx) =>
-        idx === index ? next : entry
+        idx === index ? next : entry,
       ),
     }));
   };
@@ -585,7 +855,7 @@ export default function ComposeEditor({
 
   const updateNginxField = (
     field: "cert" | "key" | "ca" | "config",
-    value: string
+    value: string,
   ) => {
     setConfig((prev) => ({
       ...prev,
@@ -601,9 +871,13 @@ export default function ComposeEditor({
 
   const updatePrometheus = (
     field: "enabled" | "configYaml",
-    value: boolean | string
+    value: boolean | string,
   ) => {
-    if (field === "configYaml" && typeof value === "string" && value.trim().length === 0) {
+    if (
+      field === "configYaml" &&
+      typeof value === "string" &&
+      value.trim().length === 0
+    ) {
       setPrometheusDraftDirty(false);
       setPrometheusDraft("");
     }
@@ -619,7 +893,7 @@ export default function ComposeEditor({
 
   const handleNginxFile = async (
     field: "cert" | "key" | "ca" | "config",
-    file: File
+    file: File,
   ) => {
     const content = await file.text();
     updateNginxField(field, content);
@@ -672,14 +946,14 @@ export default function ComposeEditor({
       const removedNames = new Set(
         prev.services
           .filter((service) => service.groupId === groupId)
-          .map((service) => service.name)
+          .map((service) => service.name),
       );
       const remaining = prev.services
         .filter((service) => service.groupId !== groupId)
         .map((service) => ({
           ...service,
           dependsOn: service.dependsOn.filter(
-            (entry) => !removedNames.has(entry.name)
+            (entry) => !removedNames.has(entry.name),
           ),
         }));
       return {
@@ -718,7 +992,9 @@ export default function ComposeEditor({
     const count = Math.max(1, serviceCount || 1);
 
     if (isPlayground) {
-      const existingNames = new Set(config.services.map((service) => service.name));
+      const existingNames = new Set(
+        config.services.map((service) => service.name),
+      );
       let index = 1;
       const nextServices: ServiceConfig[] = [];
       const groupId = crypto.randomUUID();
@@ -735,12 +1011,15 @@ export default function ComposeEditor({
             groupId,
             name,
             version,
-          })
+          }),
         );
         index += 1;
       }
 
-      setConfig((prev) => ({ ...prev, services: [...prev.services, ...nextServices] }));
+      setConfig((prev) => ({
+        ...prev,
+        services: [...prev.services, ...nextServices],
+      }));
       setSelectedService(null);
       setSelectedVersion("");
       setServiceCount(1);
@@ -759,7 +1038,7 @@ export default function ComposeEditor({
     }
 
     router.push(
-      `/compose/${config.id}/add-service?serviceId=${selectedService.id}&version=${version}&count=${count}`
+      `/compose/${config.id}/add-service?serviceId=${selectedService.id}&version=${version}&count=${count}`,
     );
   };
 
@@ -809,7 +1088,7 @@ export default function ComposeEditor({
     const result = parseComposeYamlToConfig(
       yamlDraft,
       config,
-      catalog.services
+      catalog.services,
     );
     if (result.error) {
       setYamlError(result.error);
@@ -871,6 +1150,12 @@ export default function ComposeEditor({
                 className="cursor-pointer rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-amber-700"
               >
                 Env Check
+              </button>
+              <button
+                onClick={() => setIsDependencyMapOpen(true)}
+                className="cursor-pointer rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600"
+              >
+                Dependencies
               </button>
               {!isPlayground ? (
                 <button
@@ -1052,7 +1337,7 @@ export default function ComposeEditor({
                               {service.ports.map((port, index) => {
                                 const resolved = resolvePortMapping(
                                   port,
-                                  envLookup
+                                  envLookup,
                                 );
                                 return (
                                   <div key={`${service.id}-port-${index}`}>
@@ -1101,7 +1386,7 @@ export default function ComposeEditor({
           <div className="mt-4 space-y-4">
             {config.services.filter((service) => {
               const info = catalog.services.find(
-                (item) => item.id === service.serviceId
+                (item) => item.id === service.serviceId,
               );
               const hasProps =
                 Boolean(info?.springBoot) &&
@@ -1121,12 +1406,12 @@ export default function ComposeEditor({
                   <tbody>
                     {config.services.map((service) => {
                       const info = catalog.services.find(
-                        (item) => item.id === service.serviceId
+                        (item) => item.id === service.serviceId,
                       );
                       const volumes = [...service.volumes];
                       if (info?.springBoot && service.applicationProperties) {
                         volumes.push(
-                          `./${service.name}/application.properties:/opt/app/application.properties`
+                          `./${service.name}/application.properties:/opt/app/application.properties`,
                         );
                       }
                       if (volumes.length === 0) return null;
@@ -1361,7 +1646,10 @@ export default function ComposeEditor({
                         updatePrometheus("configYaml", event.target.value);
                       }}
                       onFocus={() => {
-                        if (!prometheusDraftDirty && !config.prometheus?.configYaml?.trim()) {
+                        if (
+                          !prometheusDraftDirty &&
+                          !config.prometheus?.configYaml?.trim()
+                        ) {
                           setPrometheusDraft(prometheusYaml);
                         }
                       }}
@@ -1369,7 +1657,8 @@ export default function ComposeEditor({
                     />
                     {prometheusAuto ? (
                       <p className="mt-2 text-xs text-slate-500">
-                        Auto-generated from services marked for Prometheus. Disable auto to edit.
+                        Auto-generated from services marked for Prometheus.
+                        Disable auto to edit.
                       </p>
                     ) : null}
                   </label>
@@ -1502,7 +1791,7 @@ export default function ComposeEditor({
                     (service) =>
                       service.name.toLowerCase() ===
                         event.target.value.toLowerCase() ||
-                      service.id === event.target.value
+                      service.id === event.target.value,
                   );
                   setSelectedService(matched || null);
                   setSelectedVersion(matched?.versions[0] || "");
@@ -1578,7 +1867,7 @@ export default function ComposeEditor({
             <div className="space-y-4">
               {filteredGroups.map((group, index) => {
                 const serviceInfo = catalog.services.find(
-                  (item) => item.id === group.serviceId
+                  (item) => item.id === group.serviceId,
                 );
                 return (
                   <div
@@ -1604,7 +1893,7 @@ export default function ComposeEditor({
                           onClick={() => {
                             storePlaygroundState();
                             router.push(
-                              `/compose/${config.id}/service/${group.groupId}`
+                              `/compose/${config.id}/service/${group.groupId}`,
                             );
                           }}
                           className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-600"
@@ -1758,7 +2047,7 @@ export default function ComposeEditor({
 
       {isVolumesOverviewOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-8">
-          <div className="flex max-h-[85vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+          <div className="flex h-[88vh] w-[88vw] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">
@@ -1778,7 +2067,7 @@ export default function ComposeEditor({
             <div className="mt-4 flex-1 overflow-auto">
               {config.services.filter((service) => {
                 const info = catalog.services.find(
-                  (item) => item.id === service.serviceId
+                  (item) => item.id === service.serviceId,
                 );
                 const hasProps =
                   Boolean(info?.springBoot) &&
@@ -1798,24 +2087,29 @@ export default function ComposeEditor({
                     <tbody>
                       {config.services.map((service) => {
                         const info = catalog.services.find(
-                          (item) => item.id === service.serviceId
+                          (item) => item.id === service.serviceId,
                         );
                         const volumes = [...service.volumes];
                         if (info?.springBoot && service.applicationProperties) {
                           volumes.push(
-                            `./${service.name}/application.properties:/opt/app/application.properties`
+                            `./${service.name}/application.properties:/opt/app/application.properties`,
                           );
                         }
                         if (volumes.length === 0) return null;
                         return (
-                          <tr key={`volumes-modal-${service.id}`} className="border-t">
+                          <tr
+                            key={`volumes-modal-${service.id}`}
+                            className="border-t"
+                          >
                             <td className="px-4 py-3 font-semibold text-slate-900">
                               {service.name}
                             </td>
                             <td className="px-4 py-3 text-slate-600">
                               <div className="space-y-1">
                                 {volumes.map((volume, index) => (
-                                  <div key={`${service.id}-modal-volume-${index}`}>
+                                  <div
+                                    key={`${service.id}-modal-volume-${index}`}
+                                  >
                                     {volume}
                                   </div>
                                 ))}
@@ -1828,6 +2122,361 @@ export default function ComposeEditor({
                   </table>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isDependencyMapOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6">
+          <div className="flex h-[88vh] w-[88vw] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Service Dependencies
+                </h2>
+                <p className="text-sm text-slate-500">
+                  {config.name || "Compose"}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() =>
+                    setDependencyView((prev) =>
+                      prev === "hierarchical" ? "free" : "hierarchical",
+                    )
+                  }
+                  className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600"
+                >
+                  {dependencyView === "hierarchical"
+                    ? "Free layout"
+                    : "Hierarchical"}
+                </button>
+                <button
+                  onClick={() => setIsDependencyMapOpen(false)}
+                  className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="mt-4 grid flex-1 gap-6 overflow-hidden lg:grid-cols-[1.3fr_0.7fr]">
+              <div className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                <div
+                  ref={dependencyNetworkRef}
+                  className="h-full min-h-[560px] w-full flex-1"
+                />
+                <div className="flex items-center justify-between border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-500">
+                  <span>
+                    {showAllDependencyEdges
+                      ? "Showing all edges"
+                      : "Focused edges"}
+                  </span>
+                  <button
+                    onClick={() =>
+                      setShowAllDependencyEdges((prev) => !prev)
+                    }
+                    className="rounded-full border border-slate-200 px-2 py-1 text-xs text-slate-600"
+                  >
+                    {showAllDependencyEdges
+                      ? "Focus selected"
+                      : "Show all"}
+                  </button>
+                </div>
+              </div>
+              <div className="overflow-auto rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-widest text-slate-500">
+                      Edit dependencies
+                    </p>
+                    <div className="mt-2 flex items-center justify-end">
+                      <button
+                        onClick={() =>
+                          setShowAllDependencyEdges((prev) => !prev)
+                        }
+                        className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600"
+                      >
+                        {showAllDependencyEdges
+                          ? "Focus this service"
+                          : "Show all"}
+                      </button>
+                    </div>
+                    <h3 className="mt-2 text-lg font-semibold text-slate-900">
+                      {dependencyServiceName || "Select a service"}
+                    </h3>
+                    <select
+                      className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                      value={dependencyServiceName}
+                      onChange={(event) =>
+                        setDependencyServiceName(event.target.value)
+                      }
+                    >
+                      {dependencyServiceNames.map((name) => (
+                        <option key={`dep-select-${name}`} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {dependencyServiceName ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-semibold text-slate-700">
+                          Dependencies
+                        </h4>
+                        <button
+                          onClick={() => {
+                            const current =
+                              config.services.find(
+                                (service) =>
+                                  service.name === dependencyServiceName,
+                              )?.dependsOn || [];
+                            updateDependenciesForService(
+                              dependencyServiceName,
+                              [
+                                ...current,
+                                { name: "", condition: "service_started" },
+                              ],
+                            );
+                          }}
+                          className="rounded-lg border border-dashed border-slate-300 px-3 py-1 text-xs text-slate-600"
+                        >
+                          + Add dependency
+                        </button>
+                      </div>
+                      {(
+                        config.services.find(
+                          (service) => service.name === dependencyServiceName,
+                        )?.dependsOn || []
+                      ).length === 0 ? (
+                        <p className="text-sm text-slate-500">
+                          No dependencies added.
+                        </p>
+                      ) : (
+                        (
+                          config.services.find(
+                            (service) => service.name === dependencyServiceName,
+                          )?.dependsOn || []
+                        ).map((entry, index) => (
+                          <div
+                            key={`dep-edit-${dependencyServiceName}-${index}`}
+                            className="grid gap-3 md:grid-cols-[1fr_200px_auto]"
+                          >
+                            <select
+                              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                              value={entry.name}
+                              onChange={(event) => {
+                                const current =
+                                  config.services.find(
+                                    (service) =>
+                                      service.name === dependencyServiceName,
+                                  )?.dependsOn || [];
+                                const next = [...current];
+                                next[index] = {
+                                  ...entry,
+                                  name: event.target.value,
+                                };
+                                updateDependenciesForService(
+                                  dependencyServiceName,
+                                  next,
+                                );
+                              }}
+                            >
+                              <option value="">Select service</option>
+                              {dependencyServiceNames
+                                .filter(
+                                  (name) => name !== dependencyServiceName,
+                                )
+                                .filter(
+                                  (name) =>
+                                    name === entry.name ||
+                                    !(
+                                      config.services.find(
+                                        (service) =>
+                                          service.name ===
+                                          dependencyServiceName,
+                                      )?.dependsOn || []
+                                    ).some(
+                                      (item, idx) =>
+                                        idx !== index && item.name === name,
+                                    ),
+                                )
+                                .map((name) => (
+                                  <option
+                                    key={`dep-edit-${dependencyServiceName}-${index}-${name}`}
+                                    value={name}
+                                  >
+                                    {name}
+                                  </option>
+                                ))}
+                            </select>
+                            <select
+                              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                              value={entry.condition}
+                              onChange={(event) => {
+                                const current =
+                                  config.services.find(
+                                    (service) =>
+                                      service.name === dependencyServiceName,
+                                  )?.dependsOn || [];
+                                const next = [...current];
+                                next[index] = {
+                                  ...entry,
+                                  condition: event.target.value,
+                                };
+                                updateDependenciesForService(
+                                  dependencyServiceName,
+                                  next,
+                                );
+                              }}
+                            >
+                              <option value="">No condition</option>
+                              <option value="service_started">
+                                Service started
+                              </option>
+                              <option value="service_healthy">
+                                Service healthy
+                              </option>
+                              <option value="service_completed_successfully">
+                                Service completed successfully
+                              </option>
+                            </select>
+                            <button
+                              onClick={() => {
+                                const current =
+                                  config.services.find(
+                                    (service) =>
+                                      service.name === dependencyServiceName,
+                                  )?.dependsOn || [];
+                                const next = current.filter(
+                                  (_, idx) => idx !== index,
+                                );
+                                updateDependenciesForService(
+                                  dependencyServiceName,
+                                  next,
+                                );
+                              }}
+                              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))
+                      )}
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <button
+                          onClick={() => setDependedOnOpen((prev) => !prev)}
+                          className="flex w-full items-center justify-between text-left text-xs uppercase tracking-widest text-slate-500"
+                        >
+                          Depended on by
+                          <span className="text-sm text-slate-400">
+                            {dependedOnOpen ? "−" : "+"}
+                          </span>
+                        </button>
+                        {dependedOnOpen ? (
+                          <div className="mt-2 space-y-3 text-sm text-slate-700">
+                            {config.services.filter((service) =>
+                              service.dependsOn.some(
+                                (entry) => entry.name === dependencyServiceName
+                              )
+                            ).length === 0 ? (
+                              <span className="text-slate-500">
+                                No services depend on this.
+                              </span>
+                            ) : (
+                              config.services
+                                .filter((service) =>
+                                  service.dependsOn.some(
+                                    (entry) =>
+                                      entry.name === dependencyServiceName
+                                  )
+                                )
+                                .flatMap((service) =>
+                                  service.dependsOn
+                                    .filter(
+                                      (entry) =>
+                                        entry.name === dependencyServiceName
+                                    )
+                                    .map((entry, index) => (
+                                      <div
+                                        key={`depended-${service.id}-${index}`}
+                                        className="grid gap-3 md:grid-cols-[1fr_200px_auto]"
+                                      >
+                                        <input
+                                          readOnly
+                                          value={service.name}
+                                          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                                        />
+                                        <select
+                                          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                                          value={entry.condition}
+                                          onChange={(event) => {
+                                            const next = service.dependsOn.map(
+                                              (item, itemIndex) =>
+                                                itemIndex === index &&
+                                                item.name ===
+                                                  dependencyServiceName
+                                                  ? {
+                                                      ...item,
+                                                      condition:
+                                                        event.target.value,
+                                                    }
+                                                  : item
+                                            );
+                                            updateDependenciesForService(
+                                              service.name,
+                                              next
+                                            );
+                                          }}
+                                        >
+                                          <option value="">No condition</option>
+                                          <option value="service_started">
+                                            Service started
+                                          </option>
+                                          <option value="service_healthy">
+                                            Service healthy
+                                          </option>
+                                          <option value="service_completed_successfully">
+                                            Service completed successfully
+                                          </option>
+                                        </select>
+                                        <button
+                                          onClick={() => {
+                                            const next =
+                                              service.dependsOn.filter(
+                                                (item) =>
+                                                  !(
+                                                    item.name ===
+                                                      dependencyServiceName &&
+                                                    item.condition ===
+                                                      entry.condition
+                                                  )
+                                              );
+                                            updateDependenciesForService(
+                                              service.name,
+                                              next
+                                            );
+                                          }}
+                                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600"
+                                        >
+                                          Remove
+                                        </button>
+                                      </div>
+                                    ))
+                                )
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500">
+                      Select a service node to edit dependencies.
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1911,7 +2560,10 @@ export default function ComposeEditor({
                       {config.services
                         .filter((service) => service.ports.length > 0)
                         .map((service) => (
-                          <tr key={`ports-modal-${service.id}`} className="border-t">
+                          <tr
+                            key={`ports-modal-${service.id}`}
+                            className="border-t"
+                          >
                             <td className="px-4 py-3 font-semibold text-slate-900">
                               {service.name}
                             </td>
@@ -1920,10 +2572,12 @@ export default function ComposeEditor({
                                 {service.ports.map((port, index) => {
                                   const resolved = resolvePortMapping(
                                     port,
-                                    envLookup
+                                    envLookup,
                                   );
                                   return (
-                                    <div key={`${service.id}-modal-port-${index}`}>
+                                    <div
+                                      key={`${service.id}-modal-port-${index}`}
+                                    >
                                       {resolved}
                                     </div>
                                   );
@@ -1968,14 +2622,16 @@ export default function ComposeEditor({
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
                       placeholder="Search missing envs..."
                       value={missingEnvSearch}
-                      onChange={(event) => setMissingEnvSearch(event.target.value)}
+                      onChange={(event) =>
+                        setMissingEnvSearch(event.target.value)
+                      }
                     />
                     <div className="space-y-2">
                       {validation.missing
                         .filter((key) =>
                           key
                             .toLowerCase()
-                            .includes(missingEnvSearch.trim().toLowerCase())
+                            .includes(missingEnvSearch.trim().toLowerCase()),
                         )
                         .map((key) => (
                           <div
@@ -2020,14 +2676,16 @@ export default function ComposeEditor({
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
                       placeholder="Search unused envs..."
                       value={unusedEnvSearch}
-                      onChange={(event) => setUnusedEnvSearch(event.target.value)}
+                      onChange={(event) =>
+                        setUnusedEnvSearch(event.target.value)
+                      }
                     />
                     <div className="space-y-2">
                       {validation.unused
                         .filter((key) =>
                           key
                             .toLowerCase()
-                            .includes(unusedEnvSearch.trim().toLowerCase())
+                            .includes(unusedEnvSearch.trim().toLowerCase()),
                         )
                         .map((key) => (
                           <div
