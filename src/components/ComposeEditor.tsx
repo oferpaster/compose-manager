@@ -112,7 +112,6 @@ export default function ComposeEditor({
   const [isValidationOpen, setIsValidationOpen] = useState(false);
   const [missingEnvSearch, setMissingEnvSearch] = useState("");
   const [unusedEnvSearch, setUnusedEnvSearch] = useState("");
-  const [isEditMenuOpen, setIsEditMenuOpen] = useState(false);
   const [copiedCompose, setCopiedCompose] = useState(false);
   const [copiedEnv, setCopiedEnv] = useState(false);
   const [missingEnvValues, setMissingEnvValues] = useState<Record<string, string>>({});
@@ -873,44 +872,6 @@ export default function ComposeEditor({
               >
                 Env Check
               </button>
-              <div className="relative">
-                <button
-                  onClick={() => setIsEditMenuOpen((prev) => !prev)}
-                  className="cursor-pointer rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600"
-                >
-                  Edit inline
-                  <svg
-                    aria-hidden="true"
-                    viewBox="0 0 20 20"
-                    className="ml-2 inline-block h-3 w-3"
-                    fill="currentColor"
-                  >
-                    <path d="M5.5 7.5l4.5 4.5 4.5-4.5-1.5-1.5-3 3-3-3-1.5 1.5z" />
-                  </svg>
-                </button>
-                {isEditMenuOpen ? (
-                  <div className="absolute right-0 mt-2 w-40 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
-                    <button
-                      onClick={() => {
-                        setIsEditMenuOpen(false);
-                        openEnvEditor();
-                      }}
-                      className="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-100"
-                    >
-                      Edit .env
-                    </button>
-                    <button
-                      onClick={() => {
-                        setIsEditMenuOpen(false);
-                        openYamlEditor();
-                      }}
-                      className="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-100"
-                    >
-                      Edit YAML
-                    </button>
-                  </div>
-                ) : null}
-              </div>
               {!isPlayground ? (
                 <button
                   onClick={handleSave}
