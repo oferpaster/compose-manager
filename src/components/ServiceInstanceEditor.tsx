@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { KeyValue, ServiceConfig } from "@/lib/compose";
 import { ServiceCatalogItem } from "@/lib/serviceCatalog";
 
@@ -30,9 +30,12 @@ export default function ServiceInstanceEditor({
   const serviceInfo = catalog.find((item) => item.id === service.serviceId);
   const availableNames = Array.from(new Set(availableServiceNames || []));
 
-  const updateField = <Key extends keyof ServiceConfig>(key: Key, value: ServiceConfig[Key]) => {
-    onChange({ ...service, [key]: value });
-  };
+  const updateField = useCallback(
+    <Key extends keyof ServiceConfig>(key: Key, value: ServiceConfig[Key]) => {
+      onChange({ ...service, [key]: value });
+    },
+    [onChange, service]
+  );
 
   const updateEnv = (index: number, next: KeyValue) => {
     const env = service.env.map((entry, idx) => (idx === index ? next : entry));

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { DataSet, Network } from "vis-network/standalone";
 import {
   ComposeConfig,
   createServiceConfig,
@@ -16,6 +15,27 @@ import {
   ServiceConfig,
 } from "@/lib/compose";
 import { ServiceCatalogItem } from "@/lib/serviceCatalog";
+import DependencyMapModal from "@/components/compose/DependencyMapModal";
+import AddServiceGroupSection from "@/components/compose/AddServiceGroupSection";
+import ComposeHeader from "@/components/compose/ComposeHeader";
+import ComposeYamlPanel from "@/components/compose/ComposeYamlPanel";
+import EnvEditorModal from "@/components/compose/EnvEditorModal";
+import EnvPanel from "@/components/compose/EnvPanel";
+import EnvValidationModal from "@/components/compose/EnvValidationModal";
+import GlobalEnvSection from "@/components/compose/GlobalEnvSection";
+import LoggingSection from "@/components/compose/LoggingSection";
+import NetworksSection from "@/components/compose/NetworksSection";
+import NginxConfigSection from "@/components/compose/NginxConfigSection";
+import PortsOverviewModal from "@/components/compose/PortsOverviewModal";
+import PortsOverviewSection from "@/components/compose/PortsOverviewSection";
+import PrometheusSection from "@/components/compose/PrometheusSection";
+import SaveToast from "@/components/compose/SaveToast";
+import ScriptsSection from "@/components/compose/ScriptsSection";
+import UtilitiesSection from "@/components/compose/UtilitiesSection";
+import VolumesOverviewModal from "@/components/compose/VolumesOverviewModal";
+import VolumesOverviewSection from "@/components/compose/VolumesOverviewSection";
+import YamlEditorModal from "@/components/compose/YamlEditorModal";
+import ConfiguredServicesSection from "@/components/compose/ConfiguredServicesSection";
 
 const emptyKeyValue = (): KeyValue => ({ key: "", value: "" });
 
@@ -99,14 +119,6 @@ export default function ComposeEditor({
   const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null);
   const [scrollTarget, setScrollTarget] = useState<number | null>(null);
   const composeScrollRef = useRef<HTMLPreElement | null>(null);
-  const dependencyNetworkRef = useRef<HTMLDivElement | null>(null);
-  const dependencyNetworkInstance = useRef<Network | null>(null);
-  const dependencyNodesRef = useRef<DataSet<{
-    id: string;
-    label: string;
-    color?: unknown;
-    font?: unknown;
-  }> | null>(null);
   const [isEnvEditorOpen, setIsEnvEditorOpen] = useState(false);
   const [envDraft, setEnvDraft] = useState("");
   const [isYamlEditorOpen, setIsYamlEditorOpen] = useState(false);
@@ -127,13 +139,6 @@ export default function ComposeEditor({
   const [missingEnvValues, setMissingEnvValues] = useState<
     Record<string, string>
   >({});
-  const [dependencyServiceName, setDependencyServiceName] = useState("");
-  const [dependencyView, setDependencyView] = useState<"hierarchical" | "free">(
-    "hierarchical",
-  );
-  const [showAllDependencyEdges, setShowAllDependencyEdges] = useState(true);
-  const [dependedOnOpen, setDependedOnOpen] = useState(false);
-  const [isDarkTheme, setIsDarkTheme] = useState(false);
 
   useEffect(() => {
     if (isPlayground) return;
@@ -158,32 +163,6 @@ export default function ComposeEditor({
     if (!isPlayground || !playgroundLoaded) return;
     localStorage.setItem(PLAYGROUND_STORAGE_KEY, JSON.stringify(config));
   }, [config, isPlayground, playgroundLoaded]);
-
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-
-    const readTheme = () => {
-      const theme = document.documentElement.dataset.theme;
-      if (theme === "dark") return true;
-      if (theme === "light") return false;
-      return window.matchMedia?.("(prefers-color-scheme: dark)").matches || false;
-    };
-
-    setIsDarkTheme(readTheme());
-    const observer = new MutationObserver(() => {
-      setIsDarkTheme(readTheme());
-    });
-    observer.observe(document.documentElement, { attributes: true });
-
-    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
-    const handleMedia = () => setIsDarkTheme(readTheme());
-    media?.addEventListener?.("change", handleMedia);
-
-    return () => {
-      observer.disconnect();
-      media?.removeEventListener?.("change", handleMedia);
-    };
-  }, []);
 
   useEffect(() => {
     async function loadCatalog() {
@@ -228,71 +207,6 @@ export default function ComposeEditor({
     [config.services],
   );
 
-  const dependencyServiceNames = useMemo(() => {
-    const seen = new Set<string>();
-    const names: string[] = [];
-    config.services.forEach((service) => {
-      if (!service.name || seen.has(service.name)) return;
-      seen.add(service.name);
-      names.push(service.name);
-    });
-    return names;
-  }, [config.services]);
-
-  useEffect(() => {
-    if (!dependencyServiceNames.length) {
-      setDependencyServiceName("");
-      return;
-    }
-    if (!dependencyServiceName) {
-      setDependencyServiceName(dependencyServiceNames[0]);
-      return;
-    }
-    if (!dependencyServiceNames.includes(dependencyServiceName)) {
-      setDependencyServiceName(dependencyServiceNames[0]);
-    }
-  }, [dependencyServiceNames, dependencyServiceName]);
-
-  const dependencyEdges = useMemo(
-    () =>
-      config.services.flatMap((service) =>
-        service.dependsOn
-          .filter((entry) => entry.name)
-          .map((entry) => ({
-            from: service.name,
-            to: entry.name,
-            condition: entry.condition || "",
-          })),
-      ),
-    [config.services],
-  );
-
-  const filteredDependencyEdges = useMemo(() => {
-    if (showAllDependencyEdges || !dependencyServiceName) return dependencyEdges;
-    return dependencyEdges.filter(
-      (edge) =>
-        edge.from === dependencyServiceName ||
-        edge.to === dependencyServiceName,
-    );
-  }, [dependencyEdges, showAllDependencyEdges, dependencyServiceName]);
-
-  const focusNodeNames = useMemo(() => {
-    if (showAllDependencyEdges || !dependencyServiceName) {
-      return dependencyServiceNames;
-    }
-    const names = new Set<string>([dependencyServiceName]);
-    filteredDependencyEdges.forEach((edge) => {
-      names.add(edge.from);
-      names.add(edge.to);
-    });
-    return dependencyServiceNames.filter((name) => names.has(name));
-  }, [
-    dependencyServiceNames,
-    dependencyServiceName,
-    filteredDependencyEdges,
-    showAllDependencyEdges,
-  ]);
-
   const updateDependenciesForService = (
     serviceName: string,
     nextDependsOn: ServiceConfig["dependsOn"],
@@ -309,153 +223,6 @@ export default function ComposeEditor({
       ),
     }));
   };
-
-  useEffect(() => {
-    if (!isDependencyMapOpen) {
-      dependencyNetworkInstance.current?.destroy();
-      dependencyNetworkInstance.current = null;
-      dependencyNodesRef.current = null;
-      return;
-    }
-    if (!dependencyNetworkRef.current) return;
-
-    const nodes = new DataSet(
-      focusNodeNames.map((name) => ({
-        id: name,
-        label: name,
-      })),
-    );
-    dependencyNodesRef.current = nodes;
-    const edges = new DataSet(
-      filteredDependencyEdges.map((edge) => ({
-        id: `${edge.from}->${edge.to}`,
-        from: edge.from,
-        to: edge.to,
-        arrows: "to",
-        label: edge.condition || "",
-      })),
-    );
-
-    const isHierarchical = dependencyView === "hierarchical";
-    const labelColor = isDarkTheme ? "#f8fafc" : "#0f172a";
-    const edgeLabelColor = isDarkTheme ? "#e2e8f0" : "#475569";
-    const selectedNodeFill = isDarkTheme ? "#334155" : "#0f172a";
-    const selectedNodeStroke = isDarkTheme ? "#475569" : "#0f172a";
-    const options: Record<string, unknown> = {
-      autoResize: true,
-        physics: {
-          enabled: !isHierarchical,
-          stabilization: false,
-          barnesHut: {
-            gravitationalConstant: -5200,
-            springLength: 90,
-            springConstant: 0.05,
-            centralGravity: 0.7,
-          },
-        },
-      nodes: {
-        shape: "dot",
-        size: 12,
-        color: {
-          background: "#94a3b8",
-          border: "#64748b",
-          highlight: {
-            background: selectedNodeFill,
-            border: selectedNodeStroke,
-          },
-        },
-        font: { color: labelColor, size: 14, face: "ui-sans-serif" },
-        scaling: {
-          label: {
-            enabled: true,
-            min: 14,
-            max: 14,
-          },
-        },
-      },
-      edges: {
-        color: { color: "#94a3b8" },
-        font: { color: edgeLabelColor, size: 10, align: "middle" },
-        arrows: { to: { enabled: true, scaleFactor: 0.7 } },
-        smooth: isHierarchical
-          ? { enabled: true, type: "cubicBezier" }
-          : { enabled: true, type: "dynamic" },
-      },
-        interaction: { hover: true },
-        configure: false,
-      };
-    if (isHierarchical) {
-      options.layout = {
-        hierarchical: {
-          enabled: true,
-          direction: "LR",
-          sortMethod: "directed",
-          nodeSpacing: 90,
-          levelSeparation: 140,
-        },
-      };
-    }
-
-    const network = new Network(
-      dependencyNetworkRef.current,
-      { nodes, edges },
-      options,
-    );
-    dependencyNetworkInstance.current = network;
-    network.on("selectNode", (params) => {
-      const id = params.nodes[0];
-      if (typeof id === "string") {
-        setDependencyServiceName(id);
-      }
-    });
-    network.fit({
-      animation: { duration: 300, easingFunction: "easeInOutQuad" },
-    });
-    if (!isHierarchical) {
-      setTimeout(() => {
-        network.fit({
-          animation: { duration: 300, easingFunction: "easeInOutQuad" },
-        });
-      }, 500);
-    }
-
-    return () => {
-      network.destroy();
-    };
-  }, [
-    isDependencyMapOpen,
-    focusNodeNames,
-    filteredDependencyEdges,
-    dependencyView,
-  ]);
-
-  useEffect(() => {
-    if (!dependencyNodesRef.current) return;
-    const nodes = dependencyNodesRef.current;
-    focusNodeNames.forEach((name) => {
-      const isSelected = name === dependencyServiceName;
-      nodes.update({
-        id: name,
-        color: {
-          background: isSelected
-            ? isDarkTheme
-              ? "#334155"
-              : "#0f172a"
-            : "#94a3b8",
-          border: isSelected
-            ? isDarkTheme
-              ? "#475569"
-              : "#0f172a"
-            : "#64748b",
-        },
-        font: {
-          color: isDarkTheme ? "#f8fafc" : "#0f172a",
-          size: 14,
-          face: "ui-sans-serif",
-        },
-      });
-    });
-  }, [dependencyServiceName, focusNodeNames, isDarkTheme]);
   const filteredGroups = useMemo(() => {
     const query = serviceSearch.trim().toLowerCase();
     if (!query) return groupedServices;
@@ -1114,1617 +881,202 @@ export default function ComposeEditor({
     }
   };
 
+  const handleServiceQueryChange = (value: string) => {
+    setServiceQuery(value);
+    const matched = catalog.services.find(
+      (service) =>
+        service.name.toLowerCase() === value.toLowerCase() ||
+        service.id === value,
+    );
+    setSelectedService(matched || null);
+    setSelectedVersion(matched?.versions[0] || "");
+  };
+
+  const handlePrometheusRegenerate = () => {
+    setPrometheusAuto(true);
+    setPrometheusDraftDirty(false);
+    setPrometheusDraft(prometheusYaml);
+    updatePrometheus("configYaml", "");
+  };
+
+  const resetPlayground = () => {
+    localStorage.removeItem(PLAYGROUND_STORAGE_KEY);
+    window.location.reload();
+  };
+
   return (
     <div className="grid h-[calc(100vh-6rem)] min-w-0 gap-6 overflow-hidden lg:grid-cols-[1.3fr_1fr_0.9fr]">
       <section className="min-w-0 h-full overflow-y-auto space-y-8 pr-1">
-        <div className="space-y-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-sm uppercase tracking-widest text-slate-500">
-                Compose
-              </p>
-              <h1 className="text-3xl font-semibold text-slate-900">
-                Edit compose
-              </h1>
-            </div>
-            <div className="flex items-center gap-3">
-              <a
-                href={config.projectId ? `/projects/${config.projectId}` : "/"}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600"
-              >
-                ← Back
-              </a>
-              {isPlayground ? (
-                <button
-                  onClick={() => {
-                    localStorage.removeItem(PLAYGROUND_STORAGE_KEY);
-                    window.location.reload();
-                  }}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600"
-                >
-                  Reset
-                </button>
-              ) : null}
-              <button
-                onClick={() => setIsValidationOpen(true)}
-                className="cursor-pointer rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-amber-700"
-              >
-                Env Check
-              </button>
-              <button
-                onClick={() => setIsDependencyMapOpen(true)}
-                className="cursor-pointer rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600"
-              >
-                Dependencies
-              </button>
-              {!isPlayground ? (
-                <button
-                  onClick={handleSave}
-                  className="compose-save-button border border-slate-200 cursor-pointer rounded-full border border-slate-900 bg-slate-900 px-4 py-1.5 text-sm font-semibold text-white shadow"
-                  disabled={isSaving}
-                >
-                  <svg
-                    aria-hidden="true"
-                    viewBox="0 0 24 24"
-                    className="mr-2 inline-block h-4 w-4"
-                    fill="currentColor"
-                  >
-                    <path d="M5 3h12l4 4v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm2 2v6h10V5H7zm0 10v6h10v-6H7z" />
-                  </svg>
-                  {isSaving ? "Saving..." : "Save"}
-                </button>
-              ) : null}
-            </div>
-          </div>
+        <ComposeHeader
+          config={config}
+          isPlayground={isPlayground}
+          isSaving={isSaving}
+          validation={validation}
+          onReset={resetPlayground}
+          onOpenValidation={() => setIsValidationOpen(true)}
+          onOpenDependencies={() => setIsDependencyMapOpen(true)}
+          onSave={handleSave}
+          onChangeName={(name) =>
+            setConfig((prev) => ({ ...prev, name }))
+          }
+        />
 
-          {(validation.missing.length > 0 || validation.unused.length > 0) && (
-            <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
-              {validation.missing.length > 0 ? (
-                <p>
-                  Missing envs: {validation.missing.slice(0, 5).join(", ")}
-                  {validation.missing.length > 5 ? "…" : ""}
-                </p>
-              ) : null}
-              {validation.unused.length > 0 ? (
-                <p className={validation.missing.length > 0 ? "mt-1" : ""}>
-                  Unused envs: {validation.unused.slice(0, 5).join(", ")}
-                  {validation.unused.length > 5 ? "…" : ""}
-                </p>
-              ) : null}
-            </section>
-          )}
+        <NetworksSection
+          networks={catalog.networks}
+          selectedNetworks={config.networks}
+          onToggle={toggleNetwork}
+        />
 
-          <label className="block text-sm font-medium text-slate-700">
-            Compose name
-            <input
-              value={config.name}
-              onChange={(event) =>
-                setConfig((prev) => ({ ...prev, name: event.target.value }))
-              }
-              className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm"
-              placeholder="e.g. core-services"
-            />
-          </label>
-        </div>
+        <GlobalEnvSection
+          values={config.globalEnv}
+          onAdd={addGlobalEnv}
+          onRemove={removeGlobalEnv}
+          onUpdate={updateGlobalEnv}
+          onBlur={() => setValidationConfig(config)}
+        />
 
-        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-900">Networks</h2>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {catalog.networks.map((network) => (
-              <button
-                key={network.name}
-                onClick={() => toggleNetwork(network.name)}
-                className={`network-pill rounded-full border px-3 py-1 text-sm ${
-                  config.networks.includes(network.name)
-                    ? "network-pill-selected border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-200 text-slate-600"
-                }`}
-              >
-                {network.name}
-              </button>
-            ))}
-          </div>
-        </section>
+        <PortsOverviewSection
+          services={config.services}
+          resolvePortMapping={(port) => resolvePortMapping(port, envLookup)}
+          onOpenModal={() => setIsPortsOverviewOpen(true)}
+        />
 
-        <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <summary className="flex cursor-pointer list-none items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-900">
-              Global environment
-            </h2>
-            <span className="text-sm text-slate-500">Toggle</span>
-          </summary>
-          <div className="mt-4 space-y-3">
-            {config.globalEnv.map((entry, index) => (
-              <div
-                key={`env-${index}`}
-                className="grid gap-3 md:grid-cols-[1fr_1fr_auto]"
-              >
-                <input
-                  value={entry.key}
-                  onChange={(event) =>
-                    updateGlobalEnv(index, {
-                      ...entry,
-                      key: event.target.value,
-                    })
-                  }
-                  onBlur={() => setValidationConfig(config)}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                  placeholder="KEY"
-                />
-                <input
-                  value={entry.value}
-                  onChange={(event) =>
-                    updateGlobalEnv(index, {
-                      ...entry,
-                      value: event.target.value,
-                    })
-                  }
-                  onBlur={() => setValidationConfig(config)}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                  placeholder="value"
-                />
-                <button
-                  onClick={() => removeGlobalEnv(index)}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600"
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
-          </div>
-          <button
-            onClick={addGlobalEnv}
-            className="mt-4 cursor-pointer rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-600"
-          >
-            + Add global env
-          </button>
-        </details>
+        <VolumesOverviewSection
+          services={config.services}
+          catalogServices={catalog.services}
+          onOpenModal={() => setIsVolumesOverviewOpen(true)}
+        />
 
-        <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <summary className="flex cursor-pointer list-none items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-900">
-              Ports Overview
-            </h2>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.preventDefault();
-                  setIsPortsOverviewOpen(true);
-                }}
-                className="rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600"
-                title="Open"
-              >
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  className="h-4 w-4"
-                  fill="currentColor"
-                >
-                  <path d="M7 3H3v4a1 1 0 1 0 2 0V6h2a1 1 0 1 0 0-2zm14 0h-4a1 1 0 1 0 0 2h2v2a1 1 0 1 0 2 0V3zM5 17a1 1 0 0 0-2 0v4h4a1 1 0 1 0 0-2H5v-2zm14 0v2h-2a1 1 0 1 0 0 2h4v-4a1 1 0 0 0-2 0z" />
-                </svg>
-              </button>
-              <span className="text-sm text-slate-500">Toggle</span>
-            </div>
-          </summary>
-          <div className="mt-4 space-y-4">
-            {config.services.filter((service) => service.ports.length > 0)
-              .length === 0 ? (
-              <p className="text-sm text-slate-500">
-                No port mappings defined.
-              </p>
-            ) : (
-              <div className="overflow-hidden rounded-xl border border-slate-200">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50 text-xs uppercase tracking-widest text-slate-500">
-                    <tr>
-                      <th className="px-4 py-3">Service</th>
-                      <th className="px-4 py-3">Ports</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {config.services
-                      .filter((service) => service.ports.length > 0)
-                      .map((service) => (
-                        <tr key={`ports-${service.id}`} className="border-t">
-                          <td className="px-4 py-3 font-semibold text-slate-900">
-                            {service.name}
-                          </td>
-                          <td className="px-4 py-3 text-slate-600">
-                            <div className="space-y-1">
-                              {service.ports.map((port, index) => {
-                                const resolved = resolvePortMapping(
-                                  port,
-                                  envLookup,
-                                );
-                                return (
-                                  <div key={`${service.id}-port-${index}`}>
-                                    {resolved}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </details>
-
-        <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <summary className="flex cursor-pointer list-none items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-900">
-              Volumes Overview
-            </h2>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.preventDefault();
-                  setIsVolumesOverviewOpen(true);
-                }}
-                className="rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600"
-                title="Open"
-              >
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  className="h-4 w-4"
-                  fill="currentColor"
-                >
-                  <path d="M7 3H3v4a1 1 0 1 0 2 0V6h2a1 1 0 1 0 0-2zm14 0h-4a1 1 0 1 0 0 2h2v2a1 1 0 1 0 2 0V3zM5 17a1 1 0 0 0-2 0v4h4a1 1 0 1 0 0-2H5v-2zm14 0v2h-2a1 1 0 1 0 0 2h4v-4a1 1 0 0 0-2 0z" />
-                </svg>
-              </button>
-              <span className="text-sm text-slate-500">Toggle</span>
-            </div>
-          </summary>
-          <div className="mt-4 space-y-4">
-            {config.services.filter((service) => {
-              const info = catalog.services.find(
-                (item) => item.id === service.serviceId,
-              );
-              const hasProps =
-                Boolean(info?.springBoot) &&
-                Boolean(service.applicationProperties);
-              return service.volumes.length > 0 || hasProps;
-            }).length === 0 ? (
-              <p className="text-sm text-slate-500">No volumes mounted.</p>
-            ) : (
-              <div className="overflow-hidden rounded-xl border border-slate-200">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50 text-xs uppercase tracking-widest text-slate-500">
-                    <tr>
-                      <th className="px-4 py-3">Service</th>
-                      <th className="px-4 py-3">Volumes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {config.services.map((service) => {
-                      const info = catalog.services.find(
-                        (item) => item.id === service.serviceId,
-                      );
-                      const volumes = [...service.volumes];
-                      if (info?.springBoot && service.applicationProperties) {
-                        volumes.push(
-                          `./${service.name}/application.properties:/opt/app/application.properties`,
-                        );
-                      }
-                      if (volumes.length === 0) return null;
-                      return (
-                        <tr key={`volumes-${service.id}`} className="border-t">
-                          <td className="px-4 py-3 font-semibold text-slate-900">
-                            {service.name}
-                          </td>
-                          <td className="px-4 py-3 text-slate-600">
-                            <div className="space-y-1">
-                              {volumes.map((volume, index) => (
-                                <div key={`${service.id}-volume-${index}`}>
-                                  {volume}
-                                </div>
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </details>
-
-        <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <summary className="flex cursor-pointer list-none items-center justify-between">
-            <div className="flex items-center gap-3">
-              <h2 className="text-lg font-semibold text-slate-900">Logging</h2>
-              <span className="text-xs uppercase tracking-widest text-slate-400">
-                x-logging
-              </span>
-            </div>
-            <span className="text-sm text-slate-500">Toggle</span>
-          </summary>
-          <div className="mt-4">
-            <label className="text-sm text-slate-600">
-              Default logging template (YAML)
-              <textarea
-                className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
-                value={config.loggingTemplate || ""}
-                onChange={(event) => updateLoggingTemplate(event.target.value)}
-                placeholder={`driver: local\\noptions:\\n  max-size: \"10m\"\\n  max-file: \"5\"`}
-              />
-            </label>
-          </div>
-        </details>
+        <LoggingSection
+          value={config.loggingTemplate || ""}
+          onChange={updateLoggingTemplate}
+        />
 
         {!isPlayground ? (
           <>
-            <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <summary className="flex cursor-pointer list-none items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900">
-                    Nginx config
-                  </h2>
-                  <p className="text-xs uppercase tracking-widest text-slate-400">
-                    optional
-                  </p>
-                </div>
-                <span className="text-sm text-slate-500">Toggle</span>
-              </summary>
-              <div className="mt-4 space-y-4">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-slate-600">Certificate (.crt)</p>
-                    <label className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600">
-                      Upload
-                      <input
-                        type="file"
-                        className="hidden"
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          if (file) handleNginxFile("cert", file);
-                        }}
-                      />
-                    </label>
-                  </div>
-                  <textarea
-                    className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
-                    value={config.nginx?.cert || ""}
-                    onChange={(event) =>
-                      updateNginxField("cert", event.target.value)
-                    }
-                    placeholder="-----BEGIN CERTIFICATE-----"
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-slate-600">Private key (.key)</p>
-                    <label className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600">
-                      Upload
-                      <input
-                        type="file"
-                        className="hidden"
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          if (file) handleNginxFile("key", file);
-                        }}
-                      />
-                    </label>
-                  </div>
-                  <textarea
-                    className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
-                    value={config.nginx?.key || ""}
-                    onChange={(event) =>
-                      updateNginxField("key", event.target.value)
-                    }
-                    placeholder="-----BEGIN PRIVATE KEY-----"
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-slate-600">CA bundle (.ca)</p>
-                    <label className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600">
-                      Upload
-                      <input
-                        type="file"
-                        className="hidden"
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          if (file) handleNginxFile("ca", file);
-                        }}
-                      />
-                    </label>
-                  </div>
-                  <textarea
-                    className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
-                    value={config.nginx?.ca || ""}
-                    onChange={(event) =>
-                      updateNginxField("ca", event.target.value)
-                    }
-                    placeholder="-----BEGIN CERTIFICATE-----"
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-slate-600">nginx.conf</p>
-                    <label className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600">
-                      Upload
-                      <input
-                        type="file"
-                        className="hidden"
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          if (file) handleNginxFile("config", file);
-                        }}
-                      />
-                    </label>
-                  </div>
-                  <textarea
-                    className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
-                    value={config.nginx?.config || ""}
-                    onChange={(event) =>
-                      updateNginxField("config", event.target.value)
-                    }
-                    placeholder="server { ... }"
-                  />
-                </div>
-              </div>
-            </details>
-
-            <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <summary className="flex cursor-pointer list-none items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900">
-                    Prometheus
-                  </h2>
-                  <p className="text-xs uppercase tracking-widest text-slate-400">
-                    optional
-                  </p>
-                </div>
-                <span className="text-sm text-slate-500">Toggle</span>
-              </summary>
-              <div className="mt-4 space-y-4">
-                <label className="flex items-center gap-3 text-sm text-slate-600">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(config.prometheus?.enabled)}
-                    onChange={(event) =>
-                      updatePrometheus("enabled", event.target.checked)
-                    }
-                  />
-                  Enable Prometheus export
-                </label>
-                {config.prometheus?.enabled ? (
-                  <label className="text-sm text-slate-600">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span>prometheus.yml</span>
-                      <label className="flex items-center gap-2 text-[11px] uppercase tracking-widest text-slate-500">
-                        <input
-                          type="checkbox"
-                          checked={prometheusAuto}
-                          onChange={(event) => {
-                            const next = event.target.checked;
-                            setPrometheusAuto(next);
-                            if (next) {
-                              setPrometheusDraftDirty(false);
-                              setPrometheusDraft(prometheusYaml);
-                              updatePrometheus("configYaml", "");
-                            }
-                          }}
-                        />
-                        Auto-generate
-                      </label>
-                      {prometheusAuto ? (
-                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-emerald-700">
-                          Auto
-                        </span>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPrometheusAuto(true);
-                          setPrometheusDraftDirty(false);
-                          setPrometheusDraft(prometheusYaml);
-                          updatePrometheus("configYaml", "");
-                        }}
-                        className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-widest text-slate-500"
-                      >
-                        Regenerate
-                      </button>
-                    </div>
-                    <textarea
-                      className="prometheus-textarea mt-2 min-h-[220px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                      value={prometheusDraft || prometheusYaml}
-                      onChange={(event) => {
-                        setPrometheusDraft(event.target.value);
-                        setPrometheusDraftDirty(true);
-                        updatePrometheus("configYaml", event.target.value);
-                      }}
-                      onFocus={() => {
-                        if (
-                          !prometheusDraftDirty &&
-                          !config.prometheus?.configYaml?.trim()
-                        ) {
-                          setPrometheusDraft(prometheusYaml);
-                        }
-                      }}
-                      disabled={prometheusAuto}
-                    />
-                    {prometheusAuto ? (
-                      <p className="mt-2 text-xs text-slate-500">
-                        Auto-generated from services marked for Prometheus.
-                        Disable auto to edit.
-                      </p>
-                    ) : null}
-                  </label>
-                ) : null}
-              </div>
-            </details>
-
-            <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <summary className="flex cursor-pointer list-none items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <h2 className="text-lg font-semibold text-slate-900">
-                    Scripts
-                  </h2>
-                  <span className="text-xs uppercase tracking-widest text-slate-400">
-                    optional
-                  </span>
-                </div>
-                <span className="text-sm text-slate-500">Toggle</span>
-              </summary>
-              <div className="mt-4 space-y-4">
-                {scripts.length === 0 ? (
-                  <p className="text-sm text-slate-500">
-                    No scripts yet. Add them in Settings → Scripts.
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {scripts.map((script) => {
-                      const selected = config.scriptIds?.includes(script.id);
-                      return (
-                        <button
-                          key={script.id}
-                          onClick={() => toggleScript(script.id)}
-                          className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm ${
-                            selected
-                              ? "border-slate-900 bg-slate-900 text-white"
-                              : "border-slate-200 bg-white text-slate-700"
-                          }`}
-                        >
-                          <div>
-                            <p className="font-semibold">{script.name}</p>
-                            <p
-                              className={
-                                selected ? "text-slate-200" : "text-slate-500"
-                              }
-                            >
-                              {script.description || "No description"}
-                            </p>
-                          </div>
-                          <span className="text-xs uppercase tracking-widest">
-                            {selected ? "Selected" : "Select"}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </details>
-
-            <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <summary className="flex cursor-pointer list-none items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <h2 className="text-lg font-semibold text-slate-900">
-                    Utilities
-                  </h2>
-                  <span className="text-xs uppercase tracking-widest text-slate-400">
-                    optional
-                  </span>
-                </div>
-                <span className="text-sm text-slate-500">Toggle</span>
-              </summary>
-              <div className="mt-4 space-y-4">
-                {utilities.length === 0 ? (
-                  <p className="text-sm text-slate-500">
-                    No utilities yet. Add them in Settings → Utilities.
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {utilities.map((utility) => {
-                      const selected = config.utilityIds?.includes(utility.id);
-                      const label = utility.name || utility.file_name;
-                      return (
-                        <button
-                          key={utility.id}
-                          onClick={() => toggleUtility(utility.id)}
-                          className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm ${
-                            selected
-                              ? "border-slate-900 bg-slate-900 text-white"
-                              : "border-slate-200 bg-white text-slate-700"
-                          }`}
-                        >
-                          <div>
-                            <p className="font-semibold">{label}</p>
-                            <p
-                              className={
-                                selected ? "text-slate-200" : "text-slate-500"
-                              }
-                            >
-                              {utility.file_name || "utility.bin"}
-                            </p>
-                          </div>
-                          <span className="text-xs uppercase tracking-widest">
-                            {selected ? "Selected" : "Select"}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </details>
+            <NginxConfigSection
+              config={config}
+              onFileUpload={handleNginxFile}
+              onUpdate={updateNginxField}
+            />
+            <PrometheusSection
+              config={config}
+              prometheusAuto={prometheusAuto}
+              prometheusDraft={prometheusDraft}
+              prometheusDraftDirty={prometheusDraftDirty}
+              prometheusYaml={prometheusYaml}
+              onToggleAuto={setPrometheusAuto}
+              onDraftChange={setPrometheusDraft}
+              onDraftDirtyChange={setPrometheusDraftDirty}
+              onRegenerate={handlePrometheusRegenerate}
+              onUpdate={updatePrometheus}
+            />
+            <ScriptsSection
+              scripts={scripts}
+              selectedIds={config.scriptIds || []}
+              onToggle={toggleScript}
+            />
+            <UtilitiesSection
+              utilities={utilities}
+              selectedIds={config.utilityIds || []}
+              onToggle={toggleUtility}
+            />
           </>
         ) : null}
 
-        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">
-            Add service group
-          </h2>
-          <div className="grid gap-4 md:grid-cols-[1.5fr_1fr_0.7fr_auto]">
-            <div>
-              <label className="text-sm text-slate-600">Service</label>
-              <input
-                list="services"
-                value={serviceQuery}
-                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                placeholder="Search service..."
-                onChange={(event) => {
-                  setServiceQuery(event.target.value);
-                  const matched = catalog.services.find(
-                    (service) =>
-                      service.name.toLowerCase() ===
-                        event.target.value.toLowerCase() ||
-                      service.id === event.target.value,
-                  );
-                  setSelectedService(matched || null);
-                  setSelectedVersion(matched?.versions[0] || "");
-                }}
-              />
-              <datalist id="services">
-                {catalog.services.map((service) => (
-                  <option key={service.id} value={service.name} />
-                ))}
-              </datalist>
-            </div>
-            <div>
-              <label className="text-sm text-slate-600">Version</label>
-              <select
-                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                value={selectedVersion}
-                onChange={(event) => setSelectedVersion(event.target.value)}
-                disabled={!selectedService}
-              >
-                <option value="">Default</option>
-                {selectedService?.versions.map((version) => (
-                  <option key={version} value={version}>
-                    {version}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-sm text-slate-600">Instances</label>
-              <input
-                type="number"
-                min={1}
-                value={serviceCount}
-                onChange={(event) =>
-                  setServiceCount(Math.max(1, Number(event.target.value) || 1))
-                }
-                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-              />
-            </div>
-            <div className="flex items-end">
-              <button
-                onClick={handleAddService}
-                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-              >
-                {isPlayground ? "Add" : "Configure"}
-              </button>
-            </div>
-          </div>
-        </section>
+        <AddServiceGroupSection
+          services={catalog.services}
+          selectedService={selectedService}
+          serviceQuery={serviceQuery}
+          selectedVersion={selectedVersion}
+          serviceCount={serviceCount}
+          isPlayground={isPlayground}
+          onServiceQueryChange={handleServiceQueryChange}
+          onVersionChange={setSelectedVersion}
+          onServiceCountChange={setServiceCount}
+          onAdd={handleAddService}
+        />
 
-        <section className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-slate-900">
-              Configured services
-            </h2>
-            <div className="flex items-center gap-3">
-              <input
-                value={serviceSearch}
-                onChange={(event) => setServiceSearch(event.target.value)}
-                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900"
-                placeholder="Search services..."
-              />
-              <span className="text-xs uppercase tracking-widest text-slate-400">
-                grouped
-              </span>
-            </div>
-          </div>
-          {filteredGroups.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
-              No services match your search.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {filteredGroups.map((group, index) => {
-                const serviceInfo = catalog.services.find(
-                  (item) => item.id === group.serviceId,
-                );
-                return (
-                  <div
-                    key={group.groupId}
-                    onMouseEnter={() => setHoveredGroupId(group.groupId)}
-                    onMouseLeave={() => setHoveredGroupId(null)}
-                    className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-400 hover:shadow-md"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div>
-                        <h3 className="text-lg font-semibold text-slate-900">
-                          {serviceInfo?.name || group.serviceId}
-                        </h3>
-                        <p className="text-sm text-slate-500">
-                          {group.instances.length} instance(s):{" "}
-                          {group.instances
-                            .map((instance) => instance.name)
-                            .join(", ")}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => {
-                            storePlaygroundState();
-                            router.push(
-                              `/compose/${config.id}/service/${group.groupId}`,
-                            );
-                          }}
-                          className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-600"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => removeGroup(group.groupId)}
-                          className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-600"
-                        >
-                          Delete
-                        </button>
-                        <button
-                          onClick={() => moveGroup(group.groupId, "up")}
-                          disabled={index === 0}
-                          className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-600 disabled:opacity-40"
-                        >
-                          Move up
-                        </button>
-                        <button
-                          onClick={() => moveGroup(group.groupId, "down")}
-                          disabled={index === filteredGroups.length - 1}
-                          className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-600 disabled:opacity-40"
-                        >
-                          Move down
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
+        <ConfiguredServicesSection
+          groups={filteredGroups}
+          catalogServices={catalog.services}
+          serviceSearch={serviceSearch}
+          onServiceSearchChange={setServiceSearch}
+          onEditGroup={(groupId) => {
+            storePlaygroundState();
+            router.push(`/compose/${config.id}/service/${groupId}`);
+          }}
+          onRemoveGroup={removeGroup}
+          onMoveGroup={moveGroup}
+          onHoverGroup={setHoveredGroupId}
+        />
       </section>
 
-      <aside className="min-w-0 rounded-2xl border border-slate-200 bg-slate-950 p-5 text-white shadow-lg">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">docker-compose.yml</h2>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleSortByGroup}
-              className="rounded-full border border-white/20 px-2 py-1 text-xs text-white/80 hover:bg-white/10"
-            >
-              Sort by Group
-            </button>
-            <button
-              onClick={openYamlEditor}
-              className="rounded-full border border-white/20 px-2 py-1 text-xs text-white/80 hover:bg-white/10"
-            >
-              Edit YAML
-            </button>
-            <button
-              onClick={() => handleCopy(composeYaml, "compose")}
-              className="rounded-full border border-white/20 px-2 py-1 text-xs text-white/80 hover:bg-white/10"
-            >
-              {copiedCompose ? "Copied" : "Copy"}
-            </button>
-            <span className="flex items-center gap-2 text-xs uppercase tracking-widest text-slate-300">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-rose-400" />
-              live
-            </span>
-          </div>
-        </div>
-        <pre
-          className="mt-4 h-[78vh] overflow-auto rounded-lg bg-black/40 p-4 text-xs leading-relaxed"
-          ref={composeScrollRef}
-        >
-          <code className="block whitespace-pre">
-            {composeYaml.split("\n").map((line, index) => (
-              <span
-                key={`compose-line-${index}`}
-                data-line-index={index}
-                className={`block ${
-                  highlightLines.has(index)
-                    ? "bg-amber-400/20 text-amber-100"
-                    : ""
-                }`}
-              >
-                {line.length ? line : " "}
-              </span>
-            ))}
-          </code>
-        </pre>
-      </aside>
+      <ComposeYamlPanel
+        composeYaml={composeYaml}
+        highlightLines={highlightLines}
+        onSortByGroup={handleSortByGroup}
+        onOpenEditor={openYamlEditor}
+        onCopy={() => handleCopy(composeYaml, "compose")}
+        copied={copiedCompose}
+        scrollRef={composeScrollRef}
+      />
 
-      <aside className="min-w-0 rounded-2xl border border-slate-200 bg-slate-900 p-5 text-white shadow-lg">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">.env</h2>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={openEnvEditor}
-              className="rounded-full border border-white/20 px-2 py-1 text-xs text-white/80 hover:bg-white/10"
-            >
-              Edit .env
-            </button>
-            <button
-              onClick={() => handleCopy(envFile || "", "env")}
-              className="rounded-full border border-white/20 px-2 py-1 text-xs text-white/80 hover:bg-white/10"
-            >
-              {copiedEnv ? "Copied" : "Copy"}
-            </button>
-            <span className="flex items-center gap-2 text-xs uppercase tracking-widest text-slate-300">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-rose-400" />
-              live
-            </span>
-          </div>
-        </div>
-        <pre className="mt-4 h-[78vh] overflow-auto rounded-lg bg-black/40 p-4 text-xs leading-relaxed">
-          {envFile || "# No global environment variables yet."}
-        </pre>
-      </aside>
+      <EnvPanel
+        envFile={envFile || ""}
+        onOpenEditor={openEnvEditor}
+        onCopy={() => handleCopy(envFile || "", "env")}
+        copied={copiedEnv}
+      />
 
-      {isEnvEditorOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-8">
-          <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-slate-900">
-                Edit .env
-              </h2>
-              <button
-                onClick={() => setIsEnvEditorOpen(false)}
-                className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600"
-              >
-                Close
-              </button>
-            </div>
-            <textarea
-              className="mt-4 min-h-[320px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
-              value={envDraft}
-              onChange={(event) => setEnvDraft(event.target.value)}
-              placeholder="KEY=value"
-            />
-            <div className="mt-4 flex items-center justify-end gap-3">
-              <button
-                onClick={() => setIsEnvEditorOpen(false)}
-                className="rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-600"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={applyEnvEditor}
-                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-              >
-                Apply
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <EnvEditorModal
+        open={isEnvEditorOpen}
+        draft={envDraft}
+        onChange={setEnvDraft}
+        onApply={applyEnvEditor}
+        onClose={() => setIsEnvEditorOpen(false)}
+      />
+      <VolumesOverviewModal
+        open={isVolumesOverviewOpen}
+        onClose={() => setIsVolumesOverviewOpen(false)}
+        config={config}
+        catalog={catalog}
+      />
+      <DependencyMapModal
+        open={isDependencyMapOpen}
+        onClose={() => setIsDependencyMapOpen(false)}
+        config={config}
+        updateDependenciesForService={updateDependenciesForService}
+      />
+      <YamlEditorModal
+        open={isYamlEditorOpen}
+        draft={yamlDraft}
+        error={yamlError}
+        onChange={setYamlDraft}
+        onApply={applyYamlEditor}
+        onClose={() => setIsYamlEditorOpen(false)}
+      />
+      <PortsOverviewModal
+        open={isPortsOverviewOpen}
+        onClose={() => setIsPortsOverviewOpen(false)}
+        config={config}
+        resolvePortMapping={(port) => resolvePortMapping(port, envLookup)}
+      />
+      <EnvValidationModal
+        open={isValidationOpen}
+        onClose={() => setIsValidationOpen(false)}
+        validation={validation}
+        missingEnvSearch={missingEnvSearch}
+        unusedEnvSearch={unusedEnvSearch}
+        missingEnvValues={missingEnvValues}
+        setMissingEnvSearch={setMissingEnvSearch}
+        setUnusedEnvSearch={setUnusedEnvSearch}
+        setMissingEnvValues={setMissingEnvValues}
+        addMissingEnv={addMissingEnv}
+        removeUnusedEnv={removeUnusedEnv}
+      />
 
-      {isVolumesOverviewOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-8">
-          <div className="flex h-[88vh] w-[88vw] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">
-                  Volumes Overview
-                </h2>
-                <p className="text-sm text-slate-500">
-                  {config.name || "Compose"}
-                </p>
-              </div>
-              <button
-                onClick={() => setIsVolumesOverviewOpen(false)}
-                className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600"
-              >
-                Close
-              </button>
-            </div>
-            <div className="mt-4 flex-1 overflow-auto">
-              {config.services.filter((service) => {
-                const info = catalog.services.find(
-                  (item) => item.id === service.serviceId,
-                );
-                const hasProps =
-                  Boolean(info?.springBoot) &&
-                  Boolean(service.applicationProperties);
-                return service.volumes.length > 0 || hasProps;
-              }).length === 0 ? (
-                <p className="text-sm text-slate-500">No volumes mounted.</p>
-              ) : (
-                <div className="overflow-hidden rounded-xl border border-slate-200">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-xs uppercase tracking-widest text-slate-500">
-                      <tr>
-                        <th className="px-4 py-3">Service</th>
-                        <th className="px-4 py-3">Volumes</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {config.services.map((service) => {
-                        const info = catalog.services.find(
-                          (item) => item.id === service.serviceId,
-                        );
-                        const volumes = [...service.volumes];
-                        if (info?.springBoot && service.applicationProperties) {
-                          volumes.push(
-                            `./${service.name}/application.properties:/opt/app/application.properties`,
-                          );
-                        }
-                        if (volumes.length === 0) return null;
-                        return (
-                          <tr
-                            key={`volumes-modal-${service.id}`}
-                            className="border-t"
-                          >
-                            <td className="px-4 py-3 font-semibold text-slate-900">
-                              {service.name}
-                            </td>
-                            <td className="px-4 py-3 text-slate-600">
-                              <div className="space-y-1">
-                                {volumes.map((volume, index) => (
-                                  <div
-                                    key={`${service.id}-modal-volume-${index}`}
-                                  >
-                                    {volume}
-                                  </div>
-                                ))}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {isDependencyMapOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6">
-          <div className="flex h-[88vh] w-[88vw] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">
-                  Service Dependencies
-                </h2>
-                <p className="text-sm text-slate-500">
-                  {config.name || "Compose"}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() =>
-                    setDependencyView((prev) =>
-                      prev === "hierarchical" ? "free" : "hierarchical",
-                    )
-                  }
-                  className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600"
-                >
-                  {dependencyView === "hierarchical"
-                    ? "Free layout"
-                    : "Hierarchical"}
-                </button>
-                <button
-                  onClick={() => setIsDependencyMapOpen(false)}
-                  className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-            <div className="mt-4 grid flex-1 gap-6 overflow-hidden lg:grid-cols-[1.3fr_0.7fr]">
-              <div className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
-                <div
-                  ref={dependencyNetworkRef}
-                  className="h-full min-h-[560px] w-full flex-1"
-                />
-                <div className="flex items-center justify-between border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-500">
-                  <span>
-                    {showAllDependencyEdges
-                      ? "Showing all edges"
-                      : "Focused edges"}
-                  </span>
-                  <button
-                    onClick={() =>
-                      setShowAllDependencyEdges((prev) => !prev)
-                    }
-                    className="rounded-full border border-slate-200 px-2 py-1 text-xs text-slate-600"
-                  >
-                    {showAllDependencyEdges
-                      ? "Focus selected"
-                      : "Show all"}
-                  </button>
-                </div>
-              </div>
-              <div className="overflow-auto rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-widest text-slate-500">
-                      Edit dependencies
-                    </p>
-                    <div className="mt-2 flex items-center justify-end">
-                      <button
-                        onClick={() =>
-                          setShowAllDependencyEdges((prev) => !prev)
-                        }
-                        className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600"
-                      >
-                        {showAllDependencyEdges
-                          ? "Focus this service"
-                          : "Show all"}
-                      </button>
-                    </div>
-                    <h3 className="mt-2 text-lg font-semibold text-slate-900">
-                      {dependencyServiceName || "Select a service"}
-                    </h3>
-                    <select
-                      className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                      value={dependencyServiceName}
-                      onChange={(event) =>
-                        setDependencyServiceName(event.target.value)
-                      }
-                    >
-                      {dependencyServiceNames.map((name) => (
-                        <option key={`dep-select-${name}`} value={name}>
-                          {name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  {dependencyServiceName ? (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-semibold text-slate-700">
-                          Dependencies
-                        </h4>
-                        <button
-                          onClick={() => {
-                            const current =
-                              config.services.find(
-                                (service) =>
-                                  service.name === dependencyServiceName,
-                              )?.dependsOn || [];
-                            updateDependenciesForService(
-                              dependencyServiceName,
-                              [
-                                ...current,
-                                { name: "", condition: "service_started" },
-                              ],
-                            );
-                          }}
-                          className="rounded-lg border border-dashed border-slate-300 px-3 py-1 text-xs text-slate-600"
-                        >
-                          + Add dependency
-                        </button>
-                      </div>
-                      {(
-                        config.services.find(
-                          (service) => service.name === dependencyServiceName,
-                        )?.dependsOn || []
-                      ).length === 0 ? (
-                        <p className="text-sm text-slate-500">
-                          No dependencies added.
-                        </p>
-                      ) : (
-                        (
-                          config.services.find(
-                            (service) => service.name === dependencyServiceName,
-                          )?.dependsOn || []
-                        ).map((entry, index) => (
-                          <div
-                            key={`dep-edit-${dependencyServiceName}-${index}`}
-                            className="grid gap-3 md:grid-cols-[1fr_200px_auto]"
-                          >
-                            <select
-                              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                              value={entry.name}
-                              onChange={(event) => {
-                                const current =
-                                  config.services.find(
-                                    (service) =>
-                                      service.name === dependencyServiceName,
-                                  )?.dependsOn || [];
-                                const next = [...current];
-                                next[index] = {
-                                  ...entry,
-                                  name: event.target.value,
-                                };
-                                updateDependenciesForService(
-                                  dependencyServiceName,
-                                  next,
-                                );
-                              }}
-                            >
-                              <option value="">Select service</option>
-                              {dependencyServiceNames
-                                .filter(
-                                  (name) => name !== dependencyServiceName,
-                                )
-                                .filter(
-                                  (name) =>
-                                    name === entry.name ||
-                                    !(
-                                      config.services.find(
-                                        (service) =>
-                                          service.name ===
-                                          dependencyServiceName,
-                                      )?.dependsOn || []
-                                    ).some(
-                                      (item, idx) =>
-                                        idx !== index && item.name === name,
-                                    ),
-                                )
-                                .map((name) => (
-                                  <option
-                                    key={`dep-edit-${dependencyServiceName}-${index}-${name}`}
-                                    value={name}
-                                  >
-                                    {name}
-                                  </option>
-                                ))}
-                            </select>
-                            <select
-                              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                              value={entry.condition}
-                              onChange={(event) => {
-                                const current =
-                                  config.services.find(
-                                    (service) =>
-                                      service.name === dependencyServiceName,
-                                  )?.dependsOn || [];
-                                const next = [...current];
-                                next[index] = {
-                                  ...entry,
-                                  condition: event.target.value,
-                                };
-                                updateDependenciesForService(
-                                  dependencyServiceName,
-                                  next,
-                                );
-                              }}
-                            >
-                              <option value="">No condition</option>
-                              <option value="service_started">
-                                Service started
-                              </option>
-                              <option value="service_healthy">
-                                Service healthy
-                              </option>
-                              <option value="service_completed_successfully">
-                                Service completed successfully
-                              </option>
-                            </select>
-                            <button
-                              onClick={() => {
-                                const current =
-                                  config.services.find(
-                                    (service) =>
-                                      service.name === dependencyServiceName,
-                                  )?.dependsOn || [];
-                                const next = current.filter(
-                                  (_, idx) => idx !== index,
-                                );
-                                updateDependenciesForService(
-                                  dependencyServiceName,
-                                  next,
-                                );
-                              }}
-                              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        ))
-                      )}
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <button
-                          onClick={() => setDependedOnOpen((prev) => !prev)}
-                          className="flex w-full items-center justify-between text-left text-xs uppercase tracking-widest text-slate-500"
-                        >
-                          Depended on by
-                          <span className="text-sm text-slate-400">
-                            {dependedOnOpen ? "−" : "+"}
-                          </span>
-                        </button>
-                        {dependedOnOpen ? (
-                          <div className="mt-2 space-y-3 text-sm text-slate-700">
-                            {config.services.filter((service) =>
-                              service.dependsOn.some(
-                                (entry) => entry.name === dependencyServiceName
-                              )
-                            ).length === 0 ? (
-                              <span className="text-slate-500">
-                                No services depend on this.
-                              </span>
-                            ) : (
-                              config.services
-                                .filter((service) =>
-                                  service.dependsOn.some(
-                                    (entry) =>
-                                      entry.name === dependencyServiceName
-                                  )
-                                )
-                                .flatMap((service) =>
-                                  service.dependsOn
-                                    .filter(
-                                      (entry) =>
-                                        entry.name === dependencyServiceName
-                                    )
-                                    .map((entry, index) => (
-                                      <div
-                                        key={`depended-${service.id}-${index}`}
-                                        className="grid gap-3 md:grid-cols-[1fr_200px_auto]"
-                                      >
-                                        <input
-                                          readOnly
-                                          value={service.name}
-                                          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
-                                        />
-                                        <select
-                                          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
-                                          value={entry.condition}
-                                          onChange={(event) => {
-                                            const next = service.dependsOn.map(
-                                              (item, itemIndex) =>
-                                                itemIndex === index &&
-                                                item.name ===
-                                                  dependencyServiceName
-                                                  ? {
-                                                      ...item,
-                                                      condition:
-                                                        event.target.value,
-                                                    }
-                                                  : item
-                                            );
-                                            updateDependenciesForService(
-                                              service.name,
-                                              next
-                                            );
-                                          }}
-                                        >
-                                          <option value="">No condition</option>
-                                          <option value="service_started">
-                                            Service started
-                                          </option>
-                                          <option value="service_healthy">
-                                            Service healthy
-                                          </option>
-                                          <option value="service_completed_successfully">
-                                            Service completed successfully
-                                          </option>
-                                        </select>
-                                        <button
-                                          onClick={() => {
-                                            const next =
-                                              service.dependsOn.filter(
-                                                (item) =>
-                                                  !(
-                                                    item.name ===
-                                                      dependencyServiceName &&
-                                                    item.condition ===
-                                                      entry.condition
-                                                  )
-                                              );
-                                            updateDependenciesForService(
-                                              service.name,
-                                              next
-                                            );
-                                          }}
-                                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600"
-                                        >
-                                          Remove
-                                        </button>
-                                      </div>
-                                    ))
-                                )
-                            )}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-slate-500">
-                      Select a service node to edit dependencies.
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {isYamlEditorOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-8">
-          <div className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-slate-900">
-                Edit docker-compose.yml
-              </h2>
-              <button
-                onClick={() => setIsYamlEditorOpen(false)}
-                className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600"
-              >
-                Close
-              </button>
-            </div>
-            <textarea
-              className="mt-4 min-h-[360px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"
-              value={yamlDraft}
-              onChange={(event) => setYamlDraft(event.target.value)}
-            />
-            {yamlError ? (
-              <p className="mt-2 text-sm text-rose-600">{yamlError}</p>
-            ) : null}
-            <div className="mt-4 flex items-center justify-end gap-3">
-              <button
-                onClick={() => setIsYamlEditorOpen(false)}
-                className="rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-600"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={applyYamlEditor}
-                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-              >
-                Apply
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {isPortsOverviewOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-8">
-          <div className="flex max-h-[85vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">
-                  Ports Overview
-                </h2>
-                <p className="text-sm text-slate-500">
-                  {config.name || "Compose"}
-                </p>
-              </div>
-              <button
-                onClick={() => setIsPortsOverviewOpen(false)}
-                className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600"
-              >
-                Close
-              </button>
-            </div>
-            <div className="mt-4 flex-1 overflow-auto">
-              {config.services.filter((service) => service.ports.length > 0)
-                .length === 0 ? (
-                <p className="text-sm text-slate-500">
-                  No port mappings defined.
-                </p>
-              ) : (
-                <div className="overflow-hidden rounded-xl border border-slate-200">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-xs uppercase tracking-widest text-slate-500">
-                      <tr>
-                        <th className="px-4 py-3">Service</th>
-                        <th className="px-4 py-3">Ports</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {config.services
-                        .filter((service) => service.ports.length > 0)
-                        .map((service) => (
-                          <tr
-                            key={`ports-modal-${service.id}`}
-                            className="border-t"
-                          >
-                            <td className="px-4 py-3 font-semibold text-slate-900">
-                              {service.name}
-                            </td>
-                            <td className="px-4 py-3 text-slate-600">
-                              <div className="space-y-1">
-                                {service.ports.map((port, index) => {
-                                  const resolved = resolvePortMapping(
-                                    port,
-                                    envLookup,
-                                  );
-                                  return (
-                                    <div
-                                      key={`${service.id}-modal-port-${index}`}
-                                    >
-                                      {resolved}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {isValidationOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-8">
-          <div className="flex w-full max-w-3xl max-h-[80vh] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-slate-900">
-                Environment Check
-              </h2>
-              <button
-                onClick={() => setIsValidationOpen(false)}
-                className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600"
-              >
-                Close
-              </button>
-            </div>
-            <div className="mt-4 flex-1 space-y-6 overflow-auto">
-              <div>
-                <p className="text-sm font-semibold text-slate-700">
-                  Missing envs
-                </p>
-                {validation.missing.length === 0 ? (
-                  <p className="mt-2 text-sm text-slate-500">None</p>
-                ) : (
-                  <div className="mt-2 space-y-3 text-sm text-rose-600">
-                    <input
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                      placeholder="Search missing envs..."
-                      value={missingEnvSearch}
-                      onChange={(event) =>
-                        setMissingEnvSearch(event.target.value)
-                      }
-                    />
-                    <div className="space-y-2">
-                      {validation.missing
-                        .filter((key) =>
-                          key
-                            .toLowerCase()
-                            .includes(missingEnvSearch.trim().toLowerCase()),
-                        )
-                        .map((key) => (
-                          <div
-                            key={`missing-${key}`}
-                            className="grid items-center gap-2 md:grid-cols-[1fr_1fr_auto]"
-                          >
-                            <span className="font-semibold text-rose-600">
-                              {key}
-                            </span>
-                            <input
-                              value={missingEnvValues[key] ?? ""}
-                              onChange={(event) =>
-                                setMissingEnvValues((prev) => ({
-                                  ...prev,
-                                  [key]: event.target.value,
-                                }))
-                              }
-                              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                              placeholder="value"
-                            />
-                            <button
-                              onClick={() => addMissingEnv(key)}
-                              className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"
-                            >
-                              Add
-                            </button>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-slate-700">
-                  Unused envs
-                </p>
-                {validation.unused.length === 0 ? (
-                  <p className="mt-2 text-sm text-slate-500">None</p>
-                ) : (
-                  <div className="mt-2 space-y-3 text-sm text-slate-600">
-                    <input
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                      placeholder="Search unused envs..."
-                      value={unusedEnvSearch}
-                      onChange={(event) =>
-                        setUnusedEnvSearch(event.target.value)
-                      }
-                    />
-                    <div className="space-y-2">
-                      {validation.unused
-                        .filter((key) =>
-                          key
-                            .toLowerCase()
-                            .includes(unusedEnvSearch.trim().toLowerCase()),
-                        )
-                        .map((key) => (
-                          <div
-                            key={`unused-${key}`}
-                            className="flex items-center justify-between gap-2"
-                          >
-                            <span className="font-semibold">{key}</span>
-                            <button
-                              onClick={() => removeUnusedEnv(key)}
-                              className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            <p className="mt-4 text-xs text-slate-500">
-              Checks ${"{VAR}"} and ${"{VAR:default}"} in compose, .env, and
-              application.properties.
-            </p>
-          </div>
-        </div>
-      ) : null}
-
-      {saveMessage ? (
-        <div
-          className={`fixed left-1/2 top-6 z-50 -translate-x-1/2 rounded-2xl border px-4 py-3 text-sm shadow-lg ${
-            saveStatus === "success"
-              ? "border-emerald-200 bg-emerald-500 text-white"
-              : "border-rose-200 bg-rose-500 text-white"
-          }`}
-        >
-          {saveMessage}
-        </div>
-      ) : null}
+      <SaveToast message={saveMessage} status={saveStatus} />
     </div>
   );
 }
