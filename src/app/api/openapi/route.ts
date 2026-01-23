@@ -22,6 +22,12 @@ const openApiSpec = {
   ],
   components: {
     schemas: {
+      ErrorResponse: {
+        type: "object",
+        properties: {
+          error: { type: "string" },
+        },
+      },
       KeyValue: {
         type: "object",
         properties: {
@@ -318,6 +324,14 @@ const openApiSpec = {
               },
             },
           },
+          "500": {
+            description: "Failed to load projects",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
         },
       },
       post: {
@@ -348,6 +362,22 @@ const openApiSpec = {
                     name: { type: "string" },
                   },
                 },
+              },
+            },
+          },
+          "400": {
+            description: "Invalid request",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "500": {
+            description: "Failed to create project",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
               },
             },
           },
@@ -382,6 +412,22 @@ const openApiSpec = {
               },
             },
           },
+          "404": {
+            description: "Project not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "500": {
+            description: "Failed to load project",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
         },
       },
       delete: {
@@ -396,6 +442,22 @@ const openApiSpec = {
             content: {
               "application/json": {
                 schema: { type: "object", properties: { ok: { type: "boolean" } } },
+              },
+            },
+          },
+          "404": {
+            description: "Project not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "500": {
+            description: "Failed to delete project",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
               },
             },
           },
@@ -420,6 +482,14 @@ const openApiSpec = {
                     },
                   },
                 },
+              },
+            },
+          },
+          "500": {
+            description: "Failed to load composes",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
               },
             },
           },
@@ -459,6 +529,30 @@ const openApiSpec = {
               },
             },
           },
+          "400": {
+            description: "Invalid request",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "Project not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "500": {
+            description: "Failed to create compose",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
         },
       },
     },
@@ -478,6 +572,14 @@ const openApiSpec = {
                   type: "object",
                   properties: { config: { $ref: "#/components/schemas/ComposeConfig" } },
                 },
+              },
+            },
+          },
+          "404": {
+            description: "Compose not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
               },
             },
           },
@@ -503,7 +605,17 @@ const openApiSpec = {
             },
           },
         },
-        responses: { "200": { description: "Updated" } },
+        responses: {
+          "200": { description: "Updated" },
+          "404": {
+            description: "Compose not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
       },
       delete: {
         tags: ["Composes"],
@@ -511,7 +623,17 @@ const openApiSpec = {
         parameters: [
           { name: "id", in: "path", required: true, schema: { type: "string" } },
         ],
-        responses: { "200": { description: "Deleted" } },
+        responses: {
+          "200": { description: "Deleted" },
+          "404": {
+            description: "Compose not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
       },
     },
     "/api/composes/{id}/export": {
@@ -525,6 +647,14 @@ const openApiSpec = {
           "200": {
             description: "ZIP export",
             content: { "application/zip": { schema: { type: "string", format: "binary" } } },
+          },
+          "404": {
+            description: "Compose not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
           },
         },
       },
@@ -542,6 +672,14 @@ const openApiSpec = {
           "200": {
             description: "ZIP export",
             content: { "application/zip": { schema: { type: "string", format: "binary" } } },
+          },
+          "404": {
+            description: "Compose not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
           },
         },
       },
@@ -567,6 +705,14 @@ const openApiSpec = {
                     },
                   },
                 },
+              },
+            },
+          },
+          "404": {
+            description: "Compose not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
               },
             },
           },
@@ -603,6 +749,22 @@ const openApiSpec = {
               },
             },
           },
+          "400": {
+            description: "Validation error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "Compose not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
         },
       },
     },
@@ -619,6 +781,14 @@ const openApiSpec = {
             description: "Snapshot ZIP",
             content: { "application/zip": { schema: { type: "string", format: "binary" } } },
           },
+          "404": {
+            description: "Snapshot not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
         },
       },
       delete: {
@@ -628,7 +798,17 @@ const openApiSpec = {
           { name: "id", in: "path", required: true, schema: { type: "string" } },
           { name: "snapshotId", in: "path", required: true, schema: { type: "string" } },
         ],
-        responses: { "200": { description: "Deleted" } },
+        responses: {
+          "200": { description: "Deleted" },
+          "404": {
+            description: "Snapshot not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
       },
     },
     "/api/composes/{id}/images": {
@@ -657,6 +837,14 @@ const openApiSpec = {
                     },
                   },
                 },
+              },
+            },
+          },
+          "404": {
+            description: "Compose not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
               },
             },
           },
@@ -693,6 +881,30 @@ const openApiSpec = {
               },
             },
           },
+          "400": {
+            description: "Validation error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "Compose not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "500": {
+            description: "Download failed",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
         },
       },
     },
@@ -713,6 +925,14 @@ const openApiSpec = {
               },
             },
           },
+          "404": {
+            description: "Download not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
         },
       },
       delete: {
@@ -722,7 +942,17 @@ const openApiSpec = {
           { name: "id", in: "path", required: true, schema: { type: "string" } },
           { name: "downloadId", in: "path", required: true, schema: { type: "string" } },
         ],
-        responses: { "200": { description: "Deleted" } },
+        responses: {
+          "200": { description: "Deleted" },
+          "404": {
+            description: "Download not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
       },
     },
     "/api/templates/{serviceId}": {
@@ -744,6 +974,14 @@ const openApiSpec = {
               },
             },
           },
+          "404": {
+            description: "Template not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
         },
       },
     },
@@ -760,6 +998,14 @@ const openApiSpec = {
                   type: "object",
                   properties: { enabled: { type: "boolean" } },
                 },
+              },
+            },
+          },
+          "500": {
+            description: "Failed to check registry status",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
               },
             },
           },
@@ -786,6 +1032,22 @@ const openApiSpec = {
                     },
                   },
                 },
+              },
+            },
+          },
+          "400": {
+            description: "Refresh not available",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "500": {
+            description: "Failed to refresh versions",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
               },
             },
           },
@@ -818,6 +1080,30 @@ const openApiSpec = {
               },
             },
           },
+          "400": {
+            description: "Refresh not available",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "Template not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "500": {
+            description: "Failed to refresh versions",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
         },
       },
     },
@@ -846,6 +1132,14 @@ const openApiSpec = {
               },
             },
           },
+          "500": {
+            description: "Failed to load catalog",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
         },
       },
     },
@@ -870,6 +1164,14 @@ const openApiSpec = {
               },
             },
           },
+          "500": {
+            description: "Failed to load catalog",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
         },
       },
       put: {
@@ -891,7 +1193,25 @@ const openApiSpec = {
             },
           },
         },
-        responses: { "200": { description: "Saved" } },
+        responses: {
+          "200": { description: "Saved" },
+          "400": {
+            description: "Invalid catalog payload",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "500": {
+            description: "Failed to save catalog",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
       },
     },
     "/api/networks": {
@@ -912,6 +1232,14 @@ const openApiSpec = {
                     },
                   },
                 },
+              },
+            },
+          },
+          "500": {
+            description: "Failed to load networks",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
               },
             },
           },
@@ -936,7 +1264,25 @@ const openApiSpec = {
             },
           },
         },
-        responses: { "200": { description: "Saved" } },
+        responses: {
+          "200": { description: "Saved" },
+          "400": {
+            description: "Invalid network payload",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "500": {
+            description: "Failed to save networks",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
       },
     },
     "/api/scripts": {
@@ -957,6 +1303,14 @@ const openApiSpec = {
                     },
                   },
                 },
+              },
+            },
+          },
+          "500": {
+            description: "Failed to load scripts",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
               },
             },
           },
@@ -982,7 +1336,25 @@ const openApiSpec = {
             },
           },
         },
-        responses: { "200": { description: "Created" } },
+        responses: {
+          "200": { description: "Created" },
+          "400": {
+            description: "Invalid request",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "500": {
+            description: "Failed to create script",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
       },
     },
     "/api/scripts/{id}": {
@@ -1001,6 +1373,22 @@ const openApiSpec = {
                   type: "object",
                   properties: { script: { $ref: "#/components/schemas/Script" } },
                 },
+              },
+            },
+          },
+          "404": {
+            description: "Script not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "500": {
+            description: "Failed to load script",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
               },
             },
           },
@@ -1029,7 +1417,33 @@ const openApiSpec = {
             },
           },
         },
-        responses: { "200": { description: "Updated" } },
+        responses: {
+          "200": { description: "Updated" },
+          "400": {
+            description: "Invalid request",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "Script not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "500": {
+            description: "Failed to update script",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
       },
       delete: {
         tags: ["Scripts"],
@@ -1037,7 +1451,25 @@ const openApiSpec = {
         parameters: [
           { name: "id", in: "path", required: true, schema: { type: "string" } },
         ],
-        responses: { "200": { description: "Deleted" } },
+        responses: {
+          "200": { description: "Deleted" },
+          "404": {
+            description: "Script not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "500": {
+            description: "Failed to delete script",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
       },
     },
     "/api/utilities": {
@@ -1061,6 +1493,14 @@ const openApiSpec = {
               },
             },
           },
+          "500": {
+            description: "Failed to load utilities",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
         },
       },
       post: {
@@ -1081,7 +1521,25 @@ const openApiSpec = {
             },
           },
         },
-        responses: { "200": { description: "Created" } },
+        responses: {
+          "200": { description: "Created" },
+          "400": {
+            description: "Invalid request",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "500": {
+            description: "Failed to create utility",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
       },
     },
     "/api/utilities/{id}": {
@@ -1100,6 +1558,22 @@ const openApiSpec = {
                   type: "object",
                   properties: { utility: { $ref: "#/components/schemas/UtilityDetail" } },
                 },
+              },
+            },
+          },
+          "404": {
+            description: "Utility not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "500": {
+            description: "Failed to load utility",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
               },
             },
           },
@@ -1125,7 +1599,33 @@ const openApiSpec = {
             },
           },
         },
-        responses: { "200": { description: "Updated" } },
+        responses: {
+          "200": { description: "Updated" },
+          "400": {
+            description: "Invalid request",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "Utility not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "500": {
+            description: "Failed to update utility",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
       },
       delete: {
         tags: ["Utilities"],
@@ -1133,7 +1633,25 @@ const openApiSpec = {
         parameters: [
           { name: "id", in: "path", required: true, schema: { type: "string" } },
         ],
-        responses: { "200": { description: "Deleted" } },
+        responses: {
+          "200": { description: "Deleted" },
+          "404": {
+            description: "Utility not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "500": {
+            description: "Failed to delete utility",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
       },
     },
     "/api/utilities/{id}/download": {
@@ -1149,6 +1667,22 @@ const openApiSpec = {
             content: {
               "application/octet-stream": {
                 schema: { type: "string", format: "binary" },
+              },
+            },
+          },
+          "404": {
+            description: "Utility not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "500": {
+            description: "Failed to download utility",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
               },
             },
           },
