@@ -134,6 +134,10 @@ export default function ComposeEditor({
   const [isValidationOpen, setIsValidationOpen] = useState(false);
   const [missingEnvSearch, setMissingEnvSearch] = useState("");
   const [unusedEnvSearch, setUnusedEnvSearch] = useState("");
+  const [duplicateEnvSearch, setDuplicateEnvSearch] = useState("");
+  const [duplicateEnvTargets, setDuplicateEnvTargets] = useState<
+    Record<string, string>
+  >({});
   const [copiedCompose, setCopiedCompose] = useState(false);
   const [copiedEnv, setCopiedEnv] = useState(false);
   const [missingEnvValues, setMissingEnvValues] = useState<
@@ -276,19 +280,38 @@ export default function ComposeEditor({
     () => generateEnvFile(validationConfig),
     [validationConfig],
   );
+  const validationBaseConfig = useMemo(() => {
+    if (!isYamlEditorOpen) return validationConfig;
+    const result = parseComposeYamlToConfig(
+      yamlDraft,
+      config,
+      catalog.services,
+    );
+    return result.error ? validationConfig : result.config;
+  }, [catalog.services, config, isYamlEditorOpen, validationConfig, yamlDraft]);
 
   const validation = useMemo(() => {
     const definedGlobal = new Set<string>();
     const definedService = new Set<string>();
+    const valuesMap = new Map<string, Set<string>>();
 
-    validationConfig.globalEnv.forEach((entry) => {
+    const globalEnvEntries = isEnvEditorOpen
+      ? parseEnvText(envDraft)
+      : validationBaseConfig.globalEnv;
+    globalEnvEntries.forEach((entry) => {
       if (entry.key.trim() && entry.value.trim()) {
         definedGlobal.add(entry.key.trim());
+        const valueKey = entry.value.trim();
+        if (valueKey) {
+          if (!valuesMap.has(valueKey)) valuesMap.set(valueKey, new Set());
+          valuesMap.get(valueKey)?.add(entry.key.trim());
+        }
       }
     });
-    validationConfig.services.forEach((service) => {
+    validationBaseConfig.services.forEach((service) => {
       service.env.forEach((entry) => {
-        if (entry.key.trim()) definedService.add(entry.key.trim());
+        const key = entry.key.trim();
+        if (key) definedService.add(key);
       });
     });
 
@@ -301,11 +324,23 @@ export default function ComposeEditor({
       }
     };
 
-    extractFromText(validationComposeYaml);
-    extractFromText(validationEnvFile);
-    validationConfig.services.forEach((service) => {
+    const effectiveComposeYaml = isYamlEditorOpen
+      ? yamlDraft
+      : validationComposeYaml;
+    const effectiveEnvFile = isEnvEditorOpen ? envDraft : validationEnvFile;
+
+    extractFromText(effectiveComposeYaml);
+    extractFromText(effectiveEnvFile);
+    validationBaseConfig.services.forEach((service) => {
       if (service.applicationProperties) {
         extractFromText(service.applicationProperties);
+        return;
+      }
+      const template = catalog.services.find(
+        (item) => item.id === service.serviceId,
+      )?.applicationPropertiesTemplate;
+      if (template?.trim()) {
+        extractFromText(template);
       }
     });
 
@@ -319,8 +354,25 @@ export default function ComposeEditor({
     missing.sort();
     unused.sort();
 
-    return { missing, unused };
-  }, [validationComposeYaml, validationConfig, validationEnvFile]);
+    const duplicated = Array.from(valuesMap.entries())
+      .filter(([, keys]) => keys.size > 1)
+      .map(([value, keys]) => ({
+        value,
+        keys: Array.from(keys).sort(),
+      }))
+      .sort((a, b) => a.value.localeCompare(b.value));
+
+    return { missing, unused, duplicated };
+  }, [
+    catalog.services,
+    envDraft,
+    isEnvEditorOpen,
+    isYamlEditorOpen,
+    validationBaseConfig,
+    validationComposeYaml,
+    validationEnvFile,
+    yamlDraft,
+  ]);
 
   const resolvePortMapping = (port: string, envMap: Map<string, string>) => {
     const pattern = /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::([^}]*))?\}/g;
@@ -458,6 +510,116 @@ export default function ComposeEditor({
     });
   };
 
+  const refactorDuplicateEnv = (
+    value: string,
+    nextKeyInput: string,
+    keys: string[],
+  ) => {
+    const nextKey = nextKeyInput.trim();
+    if (!nextKey) return;
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(nextKey)) return;
+    const oldKeys = new Set(keys);
+    if (oldKeys.size === 0) return;
+
+    const pattern = /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::([^}]*))?\}/g;
+    const replaceText = (text: string) =>
+      text.replace(pattern, (match, name, fallback) => {
+        if (!oldKeys.has(name)) return match;
+        if (typeof fallback === "string") {
+          return `\${${nextKey}:${fallback}}`;
+        }
+        return `\${${nextKey}}`;
+      });
+
+    const replaceMaybe = (text?: string) => {
+      if (!text) return text;
+      return replaceText(text);
+    };
+
+    setConfig((prev) => {
+      const nextGlobalEnv = prev.globalEnv
+        .filter((entry) => !oldKeys.has(entry.key))
+        .map((entry) => ({
+          ...entry,
+          value: replaceText(entry.value),
+        }));
+
+      const existingIndex = nextGlobalEnv.findIndex(
+        (entry) => entry.key === nextKey,
+      );
+      if (existingIndex >= 0) {
+        nextGlobalEnv[existingIndex] = { key: nextKey, value };
+      } else {
+        nextGlobalEnv.push({ key: nextKey, value });
+      }
+
+      const nextServices = prev.services.map((service) => ({
+        ...service,
+        ports: service.ports.map(replaceText),
+        volumes: service.volumes.map(replaceText),
+        env: service.env.map((entry) => ({
+          ...entry,
+          value: replaceText(entry.value),
+        })),
+        envFile: service.envFile.map(replaceText),
+        networkMode: replaceMaybe(service.networkMode),
+        hostname: replaceMaybe(service.hostname),
+        pid: replaceMaybe(service.pid),
+        user: replaceMaybe(service.user),
+        restart: replaceMaybe(service.restart),
+        command: replaceMaybe(service.command),
+        entrypoint: replaceMaybe(service.entrypoint),
+        logging: replaceText(service.logging),
+        healthcheck: {
+          ...service.healthcheck,
+          test: replaceText(service.healthcheck.test),
+          interval: replaceText(service.healthcheck.interval),
+          timeout: replaceText(service.healthcheck.timeout),
+          startPeriod: replaceText(service.healthcheck.startPeriod),
+        },
+        extraYaml: replaceText(service.extraYaml),
+        applicationProperties: replaceMaybe(service.applicationProperties),
+        prometheusPort: replaceMaybe(service.prometheusPort),
+        prometheusMetricsPath: replaceMaybe(service.prometheusMetricsPath),
+        prometheusScrapeInterval: replaceMaybe(service.prometheusScrapeInterval),
+      }));
+
+      const nextConfig = {
+        ...prev,
+        globalEnv: nextGlobalEnv,
+        services: nextServices,
+        loggingTemplate: replaceMaybe(prev.loggingTemplate),
+        nginx: prev.nginx
+          ? {
+              cert: replaceMaybe(prev.nginx.cert),
+              key: replaceMaybe(prev.nginx.key),
+              ca: replaceMaybe(prev.nginx.ca),
+              config: replaceMaybe(prev.nginx.config),
+            }
+          : prev.nginx,
+        prometheus: prev.prometheus
+          ? {
+              ...prev.prometheus,
+              configYaml: replaceMaybe(prev.prometheus.configYaml),
+            }
+          : prev.prometheus,
+      };
+
+      if (isEnvEditorOpen) {
+        setEnvDraft(generateEnvFile(nextConfig));
+      }
+      if (isYamlEditorOpen) {
+        setYamlDraft((draft) => replaceText(draft));
+      }
+      return nextConfig;
+    });
+
+    setDuplicateEnvTargets((prev) => ({
+      ...prev,
+      [value]: "",
+    }));
+  };
+
   useEffect(() => {
     if (!config.prometheus?.enabled) {
       const anyServiceEnabled = config.services.some(
@@ -508,6 +670,17 @@ export default function ComposeEditor({
       return next;
     });
   }, [isValidationOpen, validation.missing]);
+
+  useEffect(() => {
+    if (!isValidationOpen) return;
+    setDuplicateEnvTargets((prev) => {
+      const next: Record<string, string> = {};
+      validation.duplicated.forEach((entry) => {
+        next[entry.value] = prev[entry.value] ?? "";
+      });
+      return next;
+    });
+  }, [isValidationOpen, validation.duplicated]);
 
   useEffect(() => {
     if (!hoveredGroupId) {
@@ -1069,11 +1242,16 @@ export default function ComposeEditor({
         missingEnvSearch={missingEnvSearch}
         unusedEnvSearch={unusedEnvSearch}
         missingEnvValues={missingEnvValues}
+        duplicateEnvSearch={duplicateEnvSearch}
+        duplicateEnvTargets={duplicateEnvTargets}
         setMissingEnvSearch={setMissingEnvSearch}
         setUnusedEnvSearch={setUnusedEnvSearch}
+        setDuplicateEnvSearch={setDuplicateEnvSearch}
         setMissingEnvValues={setMissingEnvValues}
+        setDuplicateEnvTargets={setDuplicateEnvTargets}
         addMissingEnv={addMissingEnv}
         removeUnusedEnv={removeUnusedEnv}
+        refactorDuplicateEnv={refactorDuplicateEnv}
       />
 
       <SaveToast message={saveMessage} status={saveStatus} />
