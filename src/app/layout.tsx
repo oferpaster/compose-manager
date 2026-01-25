@@ -3,6 +3,9 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "./swagger-ui.css";
 import ThemeToggle from "@/components/ThemeToggle";
+import { ensureStartupChecks } from "@/lib/startupChecks";
+
+ensureStartupChecks();
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
