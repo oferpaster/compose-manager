@@ -153,7 +153,7 @@ export default function HomePage() {
                 className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm"
               >
                 <Link
-                  href={`/projects/${project.id}`}
+                  href={`/projects/${project.id}/environments`}
                   className="min-w-[220px] flex-1"
                 >
                   <p className="text-lg font-semibold text-slate-900">
@@ -165,7 +165,7 @@ export default function HomePage() {
                 </Link>
                 <div className="flex items-center gap-2">
                   <Link
-                    href={`/projects/${project.id}`}
+                    href={`/projects/${project.id}/environments`}
                     className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-600"
                   >
                     Open

@@ -41,7 +41,13 @@ export default function ComposeHeader({
         </div>
         <div className="flex items-center gap-3">
           <a
-            href={config.projectId ? `/projects/${config.projectId}` : "/"}
+            href={
+              config.projectId && config.environmentId
+                ? `/projects/${config.projectId}/environments/${config.environmentId}`
+                : config.projectId
+                  ? `/projects/${config.projectId}/environments`
+                  : "/"
+            }
             className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600"
           >
             ← Back

@@ -60,6 +60,7 @@ export type ServiceConfig = {
 export type ComposeConfig = {
   id: string;
   projectId?: string;
+  environmentId?: string;
   name: string;
   globalEnv: KeyValue[];
   networks: string[];

@@ -11,36 +11,28 @@ export default function NewComposePage() {
   useEffect(() => {
     async function loadProjects() {
       const response = await fetch("/api/projects");
-      const data = (await response.json()) as { projects: { id: string; name: string }[] };
+      const data = (await response.json()) as {
+        projects: { id: string; name: string }[];
+      };
       setProjects(data.projects || []);
     }
 
     loadProjects().catch(() => setError("Failed to load projects"));
   }, [router]);
 
-  const handleCreate = async (projectId: string) => {
-    const response = await fetch("/api/composes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Untitled Compose", projectId }),
-    });
-
-    if (!response.ok) {
-      setError("Failed to create compose");
-      return;
-    }
-
-    const data = (await response.json()) as { id: string };
-    router.replace(`/compose/${data.id}`);
+  const handleOpenProject = (projectId: string) => {
+    router.push(`/projects/${projectId}/environments`);
   };
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-12">
       <div className="mx-auto w-full max-w-4xl space-y-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-600">
-          <p className="text-sm uppercase tracking-widest text-slate-500">New compose</p>
+          <p className="text-sm uppercase tracking-widest text-slate-500">
+            New compose
+          </p>
           <h1 className="mt-2 text-2xl font-semibold text-slate-900">
-            Choose a project
+            Choose a project environment
           </h1>
         </div>
         {error ? (
@@ -52,13 +44,15 @@ export default function NewComposePage() {
           {projects.map((project) => (
             <button
               key={project.id}
-              onClick={() => handleCreate(project.id)}
+              onClick={() => handleOpenProject(project.id)}
               className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm"
             >
               <span className="text-lg font-semibold text-slate-900">
                 {project.name}
               </span>
-              <span className="text-sm text-slate-500">Create version</span>
+              <span className="text-sm text-slate-500">
+                View environments
+              </span>
             </button>
           ))}
           {projects.length === 0 ? (

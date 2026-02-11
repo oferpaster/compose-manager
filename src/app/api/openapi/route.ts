@@ -11,6 +11,7 @@ const openApiSpec = {
   servers: [{ url: "/" }],
   tags: [
     { name: "Projects" },
+    { name: "Environments" },
     { name: "Composes" },
     { name: "Snapshots" },
     { name: "Images" },
@@ -100,6 +101,7 @@ const openApiSpec = {
         properties: {
           id: { type: "string" },
           projectId: { type: "string" },
+          environmentId: { type: "string" },
           name: { type: "string" },
           globalEnv: { type: "array", items: { $ref: "#/components/schemas/KeyValue" } },
           networks: { type: "array", items: { type: "string" } },
@@ -168,12 +170,23 @@ const openApiSpec = {
           imageDownloads: { type: "boolean" },
         },
       },
+      Environment: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          project_id: { type: "string" },
+          name: { type: "string" },
+          description: { type: "string" },
+          updated_at: { type: "string" },
+        },
+      },
       ComposeRow: {
         type: "object",
         properties: {
           id: { type: "string" },
           name: { type: "string" },
           project_id: { type: "string" },
+          environment_id: { type: "string" },
           updated_at: { type: "string" },
         },
       },
@@ -387,23 +400,19 @@ const openApiSpec = {
     "/api/projects/{id}": {
       get: {
         tags: ["Projects"],
-        summary: "Get project and versions",
+        summary: "Get project details",
         parameters: [
           { name: "id", in: "path", required: true, schema: { type: "string" } },
         ],
         responses: {
           "200": {
-            description: "Project + compose list",
+            description: "Project details",
             content: {
               "application/json": {
                 schema: {
                   type: "object",
                   properties: {
                     project: { $ref: "#/components/schemas/ProjectSummary" },
-                    composes: {
-                      type: "array",
-                      items: { $ref: "#/components/schemas/ComposeSummary" },
-                    },
                     capabilities: {
                       $ref: "#/components/schemas/ProjectCapabilities",
                     },
@@ -413,7 +422,7 @@ const openApiSpec = {
             },
           },
           "404": {
-            description: "Project not found",
+            description: "Environment not found",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },
@@ -432,7 +441,7 @@ const openApiSpec = {
       },
       delete: {
         tags: ["Projects"],
-        summary: "Delete project and composes",
+        summary: "Delete project and environments",
         parameters: [
           { name: "id", in: "path", required: true, schema: { type: "string" } },
         ],
@@ -455,6 +464,181 @@ const openApiSpec = {
           },
           "500": {
             description: "Failed to delete project",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/environments": {
+      get: {
+        tags: ["Environments"],
+        summary: "List environments for a project",
+        parameters: [
+          { name: "projectId", in: "query", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          "200": {
+            description: "Environment list",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    project: { $ref: "#/components/schemas/ProjectSummary" },
+                    environments: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/Environment" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Missing projectId",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "Project not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+      post: {
+        tags: ["Environments"],
+        summary: "Create environment",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  description: { type: "string" },
+                  projectId: { type: "string" },
+                },
+                required: ["projectId"],
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Created environment",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    id: { type: "string" },
+                    name: { type: "string" },
+                    description: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Missing projectId",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "Project not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/environments/{id}": {
+      get: {
+        tags: ["Environments"],
+        summary: "Get environment details",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+          { name: "projectId", in: "query", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          "200": {
+            description: "Environment details",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    project: { $ref: "#/components/schemas/ProjectSummary" },
+                    environment: {
+                      type: "object",
+                      properties: {
+                        id: { type: "string" },
+                        name: { type: "string" },
+                        description: { type: "string" },
+                      },
+                    },
+                    composes: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/ComposeSummary" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Missing projectId",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "Environment not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+      delete: {
+        tags: ["Environments"],
+        summary: "Delete environment and composes",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          "200": {
+            description: "Deleted",
+            content: {
+              "application/json": {
+                schema: { type: "object", properties: { ok: { type: "boolean" } } },
+              },
+            },
+          },
+          "404": {
+            description: "Environment not found",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },
@@ -507,9 +691,10 @@ const openApiSpec = {
                 properties: {
                   name: { type: "string" },
                   projectId: { type: "string" },
+                  environmentId: { type: "string" },
                   config: { $ref: "#/components/schemas/ComposeConfig" },
                 },
-                required: ["projectId"],
+                required: ["projectId", "environmentId"],
               },
             },
           },

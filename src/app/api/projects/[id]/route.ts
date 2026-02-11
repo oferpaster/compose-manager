@@ -13,15 +13,8 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const composes = db
-    .prepare(
-      "SELECT id, name, updated_at FROM composes WHERE project_id = ? ORDER BY updated_at DESC"
-    )
-    .all(id);
-
   return NextResponse.json({
     project,
-    composes,
     capabilities: { imageDownloads: isDockerImageDownloadEnabled() },
   });
 }
@@ -33,6 +26,7 @@ export async function DELETE(
   const { id } = await params;
   const db = getDb();
   db.prepare("DELETE FROM composes WHERE project_id = ?").run(id);
+  db.prepare("DELETE FROM environments WHERE project_id = ?").run(id);
   db.prepare("DELETE FROM projects WHERE id = ?").run(id);
   return NextResponse.json({ ok: true });
 }

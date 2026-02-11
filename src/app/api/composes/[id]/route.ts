@@ -10,8 +10,10 @@ export async function GET(
   const { id } = await params;
   const db = getDb();
   const row = db
-    .prepare("SELECT config_json, project_id FROM composes WHERE id = ?")
-    .get(id) as { config_json: string; project_id: string } | undefined;
+    .prepare("SELECT config_json, project_id, environment_id FROM composes WHERE id = ?")
+    .get(id) as
+    | { config_json: string; project_id: string; environment_id: string }
+    | undefined;
   if (!row) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -20,6 +22,7 @@ export async function GET(
   const config = normalizeComposeConfig({
     ...parsed,
     projectId: parsed.projectId || row.project_id,
+    environmentId: parsed.environmentId || row.environment_id,
   });
   return NextResponse.json({ config });
 }
@@ -32,8 +35,8 @@ export async function PUT(
   const body = (await request.json()) as { name?: string; config?: ComposeConfig };
   const db = getDb();
   const existing = db
-    .prepare("SELECT id, project_id FROM composes WHERE id = ?")
-    .get(id) as { id: string; project_id: string } | undefined;
+    .prepare("SELECT id, project_id, environment_id FROM composes WHERE id = ?")
+    .get(id) as { id: string; project_id: string; environment_id: string } | undefined;
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -44,6 +47,7 @@ export async function PUT(
     ...(body.config || {
       id,
       projectId: "",
+      environmentId: "",
       name,
       globalEnv: [],
       networks: ["backend"],
@@ -51,15 +55,17 @@ export async function PUT(
     }),
     id,
     projectId: body.config?.projectId || existing.project_id,
+    environmentId: body.config?.environmentId || existing.environment_id,
     name,
   });
 
   db.prepare(
-    "UPDATE composes SET name = ?, config_json = ?, updated_at = ? WHERE id = ?"
+    "UPDATE composes SET name = ?, config_json = ?, updated_at = ?, environment_id = ? WHERE id = ?"
   ).run(
     name,
     JSON.stringify(config),
     now,
+    config.environmentId || existing.environment_id,
     id
   );
 

@@ -29,6 +29,5 @@ export type ImageDownloadRow = {
 
 export type ProjectResponse = {
   project: { id: string; name: string };
-  composes: ComposeRow[];
   capabilities?: { imageDownloads?: boolean };
 };

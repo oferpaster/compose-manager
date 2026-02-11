@@ -44,6 +44,7 @@ export default function useDuplicateCompose({
       body: JSON.stringify({
         name: nextName,
         projectId: project.id,
+        environmentId: data.config.environmentId || project.id,
         config: { ...data.config, name: nextName },
       }),
     });

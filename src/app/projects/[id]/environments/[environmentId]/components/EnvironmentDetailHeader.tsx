@@ -2,36 +2,39 @@
 
 import Link from "next/link";
 
-type ProjectHeaderProps = {
+type EnvironmentDetailHeaderProps = {
+  projectId: string;
   projectName: string;
+  environmentName: string;
   onCreate: () => void;
-  createLabel?: string;
 };
 
-export default function ProjectHeader({
+export default function EnvironmentDetailHeader({
+  projectId,
   projectName,
+  environmentName,
   onCreate,
-  createLabel = "Create new version",
-}: ProjectHeaderProps) {
+}: EnvironmentDetailHeaderProps) {
   return (
     <header className="flex flex-wrap items-center justify-between gap-4">
       <div>
         <p className="text-sm uppercase tracking-widest text-slate-500">
-          Project
+          {projectName}
         </p>
         <h1 className="text-3xl font-semibold text-slate-900">
-          {projectName}
+          {environmentName}
         </h1>
+        <p className="mt-1 text-sm text-slate-500">Compose versions</p>
       </div>
       <div className="flex items-center gap-3">
         <Link
-          href="/"
+          href={`/projects/${projectId}/environments`}
           className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600"
         >
           <span className="mr-2 inline-flex h-4 w-4 items-center justify-center">
             ←
           </span>
-          Back to projects
+          Back to environments
         </Link>
         <button
           onClick={onCreate}
@@ -45,7 +48,7 @@ export default function ProjectHeader({
           >
             <path d="M12 4a1 1 0 0 1 1 1v6h6a1 1 0 1 1 0 2h-6v6a1 1 0 1 1-2 0v-6H5a1 1 0 1 1 0-2h6V5a1 1 0 0 1 1-1z" />
           </svg>
-          {createLabel}
+          Create new version
         </button>
       </div>
     </header>

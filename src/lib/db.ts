@@ -32,6 +32,7 @@ function initDb(database: Database.Database) {
       CREATE TABLE IF NOT EXISTS composes (
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,
+        environment_id TEXT NOT NULL,
         name TEXT NOT NULL,
         config_json TEXT NOT NULL,
         created_at TEXT NOT NULL,
@@ -118,6 +119,35 @@ function initDb(database: Database.Database) {
   if (!hasProjectId) {
     database.prepare("ALTER TABLE composes ADD COLUMN project_id TEXT").run();
   }
+  const hasEnvironmentId = columns.some((col) => col.name === "environment_id");
+  if (!hasEnvironmentId) {
+    database.prepare("ALTER TABLE composes ADD COLUMN environment_id TEXT").run();
+    database.prepare("UPDATE composes SET environment_id = project_id").run();
+  }
+
+  database
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS environments (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `
+    )
+    .run();
+
+  database
+    .prepare(
+      `
+      INSERT OR IGNORE INTO environments (id, project_id, name, description, created_at, updated_at)
+      SELECT id, id, 'Default', 'Auto-created for existing composes', created_at, updated_at FROM projects
+    `
+    )
+    .run();
 
   const scriptColumns = database.prepare("PRAGMA table_info(scripts)").all() as { name: string }[];
   const hasFileName = scriptColumns.some((col) => col.name === "file_name");
